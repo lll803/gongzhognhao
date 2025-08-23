@@ -132,81 +132,96 @@ export function HotItems() {
   useEffect(() => { loadItems() }, [])
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>热门榜单</CardTitle>
-          {lastRefreshTime && (
-            <p className="text-sm text-muted-foreground mt-1">
-              最后刷新: {formatRelativeTime(lastRefreshTime)}
-            </p>
-          )}
-        </div>
-        <Button 
-          variant="accent" 
-          size="sm" 
-          onClick={refreshAll} 
-          disabled={isPending || isRefreshing}
-        >
-          {isRefreshing ? '刷新中…' : '刷新全部'}
-        </Button>
-      </CardHeader>
-      
-      <CardContent className="space-y-4">
-        {/* 榜单状态 */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {boardStatuses.map((board) => (
-            <div key={board.hashid} className="flex items-center justify-between p-2 rounded-lg border text-sm">
-              <span className="truncate">{board.label}</span>
-              {getStatusBadge(board)}
-            </div>
-          ))}
-        </div>
-
-        {/* 热榜内容 */}
-        <div className="space-y-3">
-          <h3 className="text-lg font-medium">热门内容</h3>
-          {items.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-8">
-              暂无数据，点击"刷新全部"开始采集
-            </div>
-          ) : (
-            items.map((item) => (
-              <a 
-                key={`${item.hashid}-${item.rank}-${item.url}`} 
-                href={item.url} 
-                target="_blank" 
-                rel="noreferrer" 
-                className="flex items-center space-x-3 p-4 rounded-xl border hover:bg-accent/5 transition-colors"
-              >
+    <div className="w-full max-w-full overflow-hidden">
+      <Card className="w-full">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 sm:px-6">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="text-lg sm:text-xl">热门榜单</CardTitle>
+            {lastRefreshTime && (
+              <p className="text-sm text-muted-foreground mt-1">
+                最后刷新: {formatRelativeTime(lastRefreshTime)}
+              </p>
+            )}
+          </div>
+          <Button 
+            variant="accent" 
+            size="sm" 
+            onClick={refreshAll} 
+            disabled={isPending || isRefreshing}
+            className="flex-shrink-0 w-full sm:w-auto"
+          >
+            {isRefreshing ? '刷新中…' : '刷新全部'}
+          </Button>
+        </CardHeader>
+        
+        <CardContent className="space-y-4 px-4 sm:px-6">
+          {/* 榜单状态 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {boardStatuses.map((board) => (
+              <div key={board.hashid} className="flex items-center justify-between p-3 rounded-lg border text-sm min-w-0">
+                <span className="truncate flex-1 mr-2 text-xs sm:text-sm">{board.label}</span>
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-sm font-bold text-amber-600">
-                    {item.rank}
-                  </div>
+                  {getStatusBadge(board)}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-2 mb-1">
-                    <h4 className="text-sm font-medium text-gray-900 truncate">{item.title}</h4>
-                    <Badge variant="outline" className="text-xs">
-                      {TARGET_BOARDS.find(b => b.hashid === item.hashid)?.label || item.hashid}
-                    </Badge>
-                  </div>
-                  {item.description ? (
-                    <p className="text-xs text-gray-500 mb-2 line-clamp-2">{item.description}</p>
-                  ) : null}
-                  <div className="flex items-center justify-between text-xs text-gray-400">
-                    <span className="truncate max-w-[40%]">
-                      {TARGET_BOARDS.find(b => b.hashid === item.hashid)?.label || item.hashid}
-                    </span>
-                    <span>热度: {item.hot_value.toLocaleString()}</span>
-                    <span>{formatRelativeTime(item.collected_at)}</span>
-                  </div>
-                </div>
-              </a>
-            ))
-          )}
-        </div>
-      </CardContent>
-    </Card>
+              </div>
+            ))}
+          </div>
+
+          {/* 热榜内容 */}
+          <div className="space-y-3">
+            <h3 className="text-lg font-medium">热门内容</h3>
+            {items.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-8">
+                暂无数据，点击"刷新全部"开始采集
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {items.map((item) => (
+                  <a 
+                    key={`${item.hashid}-${item.rank}-${item.url}`} 
+                    href={item.url} 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="block p-4 rounded-xl border hover:bg-accent/5 transition-colors min-w-0 break-words"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-sm font-bold text-amber-600">
+                          {item.rank}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex flex-col gap-2 mb-2">
+                          <h4 className="text-sm font-medium text-gray-900 line-clamp-2 leading-relaxed break-words">
+                            {item.title}
+                          </h4>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="text-xs whitespace-nowrap">
+                              {TARGET_BOARDS.find(b => b.hashid === item.hashid)?.label || item.hashid}
+                            </Badge>
+                          </div>
+                        </div>
+                        {item.description && (
+                          <p className="text-xs text-gray-500 mb-3 line-clamp-2 leading-relaxed break-words">{item.description}</p>
+                        )}
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs text-gray-400">
+                          <span className="truncate break-words">
+                            {TARGET_BOARDS.find(b => b.hashid === item.hashid)?.label || item.hashid}
+                          </span>
+                          <div className="flex items-center gap-2 sm:gap-4 text-xs flex-wrap">
+                            <span className="whitespace-nowrap">热度: {item.hot_value.toLocaleString()}</span>
+                            <span className="whitespace-nowrap">{formatRelativeTime(item.collected_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

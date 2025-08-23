@@ -59,4 +59,22 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* 确保文本不会溢出容器 */
+  .break-words {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  /* 改善响应式布局 */
+  .container {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+  
+  /* 确保卡片内容不会溢出 */
+  .card-content {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+  }
 } 
