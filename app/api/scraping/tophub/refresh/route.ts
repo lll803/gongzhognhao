@@ -61,8 +61,12 @@ export async function POST(req: NextRequest) {
     ? TARGET_BOARDS.filter((b) => b.hashid === onlyHashid)
     : TARGET_BOARDS
 
+  console.log(`Starting refresh for ${boards.length} boards...`)
+
   for (const { hashid } of boards) {
     try {
+      console.log(`Fetching board: ${hashid}`)
+      
       const res = await fetch(`${TOPHUB_BASE_URL}/nodes/${hashid}`, {
         method: 'GET',
         headers: { Authorization: TOPHUB_API_KEY },
@@ -71,17 +75,29 @@ export async function POST(req: NextRequest) {
       })
 
       if (!res.ok) {
-        results.push({ hashid, ok: false, count: 0, error: `HTTP ${res.status}` })
+        const errorMsg = `HTTP ${res.status}`
+        console.error(`Failed to fetch ${hashid}: ${errorMsg}`)
+        results.push({ hashid, ok: false, count: 0, error: errorMsg })
         continue
       }
 
       const json = (await res.json()) as TopHubBoardResponse
+      console.log(`Board ${hashid} response:`, { 
+        error: json.error, 
+        status: json.status, 
+        hasData: !!json.data,
+        itemCount: json.data?.items?.length || 0
+      })
+      
       if (json.error || !json.data) {
-        results.push({ hashid, ok: false, count: 0, error: 'Invalid response' })
+        const errorMsg = 'Invalid response'
+        console.error(`Invalid response for ${hashid}:`, json)
+        results.push({ hashid, ok: false, count: 0, error: errorMsg })
         continue
       }
 
       const board = json.data
+      console.log(`Processing board: ${board.name} (${board.hashid}) with ${board.items?.length || 0} items`)
 
       // Upsert board metadata
       const { error: boardErr } = await supabaseAdmin
@@ -101,9 +117,12 @@ export async function POST(req: NextRequest) {
         )
 
       if (boardErr) {
+        console.error(`Failed to upsert board ${hashid}:`, boardErr)
         results.push({ hashid, ok: false, count: 0, error: boardErr.message })
         continue
       }
+
+      console.log(`Board ${hashid} metadata saved successfully`)
 
       // Prepare items with rank
       const items = (board.items || []).map((it, idx) => ({
@@ -118,26 +137,38 @@ export async function POST(req: NextRequest) {
         collected_at: new Date().toISOString(),
       }))
 
+      console.log(`Prepared ${items.length} items for board ${hashid}`)
+
       // Upsert items, dedupe by (hashid, url)
-      const { error: itemsErr } = await supabaseAdmin
+      const { error: itemsErr, data: insertedItems } = await supabaseAdmin
         .from('hotitems')
         .upsert(items, { onConflict: 'hashid,url' })
 
       if (itemsErr) {
+        console.error(`Failed to upsert items for ${hashid}:`, itemsErr)
         results.push({ hashid, ok: false, count: 0, error: itemsErr.message })
         continue
       }
 
+      console.log(`Successfully saved ${items.length} items for board ${hashid}`)
       results.push({ hashid, ok: true, count: items.length })
+      
       // Small delay to be polite and avoid backend timeout
-      await new Promise((r) => setTimeout(r, 250))
+      if (boards.indexOf({ hashid, label: '' }) < boards.length - 1) {
+        await new Promise((r) => setTimeout(r, 250))
+      }
     } catch (e: any) {
+      console.error(`Unexpected error for board ${hashid}:`, e)
       results.push({ hashid, ok: false, count: 0, error: e?.message || 'Unknown error' })
     }
   }
 
   const total = results.reduce((sum, r) => sum + r.count, 0)
   const ok = results.every((r) => r.ok)
+  
+  console.log(`Refresh completed. Total items: ${total}, All successful: ${ok}`)
+  console.log('Results:', results)
+  
   return NextResponse.json({ success: ok, total, results })
 }
 
