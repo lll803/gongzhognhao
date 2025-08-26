@@ -39,42 +39,48 @@ const STYLE_PROMPTS: Record<RewriteStyle, string> = {
 export async function performAIRewrite(request: AIRewriteRequest): Promise<AIRewriteResponse> {
   try {
     const { content, title, description, style, customPrompt } = request
+
+    const originalLength = (content || '').replace(/\s+/g, '').length
+    // 至少 600 字，目标不小于原文的 80%，并限制上限，避免超长
+    const minChars = Math.max(600, Math.floor(originalLength * 0.8))
+    const targetNote = `正文至少 ${minChars} 字，尽量接近原文长度；分段自然。`
     
     // 构建改写提示词
     const basePrompt = STYLE_PROMPTS[style]
     const customPromptText = customPrompt ? `\n\n特殊要求：${customPrompt}` : ''
-    
+
     let fullPrompt = `${basePrompt}${customPromptText}\n\n请改写以下内容：\n\n`
-    
+
     if (title) {
       fullPrompt += `标题：${title}\n\n`
     }
-    
+
     if (description) {
       fullPrompt += `描述：${description}\n\n`
     }
-    
-    fullPrompt += `正文内容：\n${content}\n\n请提供改写后的内容，保持原意的同时提升表达质量。`
+
+    fullPrompt += `正文内容：\n${content}\n\n请严格按以下格式输出改写后的完整文章：\n- 仅输出内容本身，不要任何解释或前后缀\n- 不要包含“标题:”“正文内容:”等标签\n- 第一行是改写后的标题\n- 空一行后输出正文\n- ${targetNote}`
 
     // 调用OpenAI API
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL || 'openai/gpt-3.5-turbo',
+      model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: '你是一个专业的内容改写助手，擅长以不同的风格改写文章内容，保持原意的同时提升表达质量。'
+          content: '你是一个专业的内容改写助手，擅长以不同的风格改写文章内容，保持原意与事实准确的同时提升表达质量与结构完整性。输出必须为中文。'
         },
         {
           role: 'user',
           content: fullPrompt
         }
       ],
-      max_tokens: parseInt(process.env.OPENROUTER_MAX_TOKENS || '2000'),
-      temperature: parseFloat(process.env.OPENROUTER_TEMPERATURE || '0.7'),
+      // 提高可生成长度
+      max_tokens: parseInt(process.env.OPENROUTER_MAX_TOKENS || '4000'),
+      temperature: parseFloat(process.env.OPENROUTER_TEMPERATURE || '0.6'),
     })
 
     const response = completion.choices[0]?.message?.content
-    
+
     if (!response) {
       throw new Error('AI响应为空')
     }
@@ -83,21 +89,11 @@ export async function performAIRewrite(request: AIRewriteRequest): Promise<AIRew
     const lines = response.split('\n')
     let rewrittenTitle = title
     let rewrittenDescription = description
-    let rewrittenContent = response
 
-    // 尝试提取改写后的标题和描述
-    if (title && response.includes('标题：')) {
-      const titleMatch = response.match(/标题：(.+?)(?:\n|$)/)
-      if (titleMatch) {
-        rewrittenTitle = titleMatch[1].trim()
-      }
-    }
-
-    if (description && response.includes('描述：')) {
-      const descMatch = response.match(/描述：(.+?)(?:\n|$)/)
-      if (descMatch) {
-        rewrittenDescription = descMatch[1].trim()
-      }
+    // 如果模型按约定返回“首行标题”，尝试取第一行作为标题
+    const firstNonEmpty = lines.find(l => l.trim())?.trim() || ''
+    if (firstNonEmpty && !firstNonEmpty.startsWith('标题')) {
+      rewrittenTitle = firstNonEmpty
     }
 
     return {
