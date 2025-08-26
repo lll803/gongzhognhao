@@ -129,13 +129,9 @@ export function ArticleList() {
 
     try {
       setIsDeleting(true)
-      
-      // 这里调用删除API
-      // const res = await fetch(`/api/articles/${articleId}`, { method: 'DELETE' })
-      // if (!res.ok) throw new Error('删除失败')
-      
-      // 模拟删除成功
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // 实际删除后端任务与结果
+      const res = await fetch(`/api/ai/rewrite/${articleId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('删除失败')
       
       // 从列表中移除
       setArticles(prev => prev.filter(article => article.id !== articleId))
@@ -166,17 +162,11 @@ export function ArticleList() {
 
     try {
       setIsDeleting(true)
-      
-      // 这里调用批量删除API
-      // const res = await fetch('/api/articles/batch-delete', {
-      //   method: 'DELETE',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ ids: Array.from(selectedArticles) })
-      // })
-      // if (!res.ok) throw new Error('批量删除失败')
-      
-      // 模拟删除成功
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // 逐个删除后端任务
+      const ids = Array.from(selectedArticles)
+      for (const id of ids) {
+        try { await fetch(`/api/ai/rewrite/${id}`, { method: 'DELETE' }) } catch {}
+      }
       
       // 从列表中移除
       setArticles(prev => prev.filter(article => !selectedArticles.has(article.id)))

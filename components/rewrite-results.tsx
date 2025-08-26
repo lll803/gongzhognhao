@@ -153,13 +153,8 @@ export function RewriteResults() {
 
     try {
       setIsDeleting(true)
-      
-      // 这里调用删除API
-      // const res = await fetch(`/api/ai/rewrite/${taskId}`, { method: 'DELETE' })
-      // if (!res.ok) throw new Error('删除失败')
-      
-      // 模拟删除成功
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const res = await fetch(`/api/ai/rewrite/${taskId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('删除失败')
       
       // 从列表中移除
       setTasks(prev => prev.filter(task => task.id !== taskId))
@@ -190,17 +185,10 @@ export function RewriteResults() {
 
     try {
       setIsDeleting(true)
-      
-      // 这里调用批量删除API
-      // const res = await fetch('/api/ai/rewrite/batch-delete', {
-      //   method: 'DELETE',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ ids: Array.from(selectedTasks) })
-      // })
-      // if (!res.ok) throw new Error('批量删除失败')
-      
-      // 模拟删除成功
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const ids = Array.from(selectedTasks)
+      for (const id of ids) {
+        try { await fetch(`/api/ai/rewrite/${id}`, { method: 'DELETE' }) } catch {}
+      }
       
       // 从列表中移除
       setTasks(prev => prev.filter(task => !selectedTasks.has(task.id)))

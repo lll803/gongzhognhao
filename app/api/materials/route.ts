@@ -156,3 +156,40 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+// 删除素材（支持通过 ?materialId= 或 body.materialId 指定）
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const fromQuery = searchParams.get('materialId')
+    let materialId = fromQuery ? Number(fromQuery) : undefined
+    if (!materialId) {
+      try {
+        const body = await request.json()
+        if (body?.materialId) materialId = Number(body.materialId)
+      } catch {}
+    }
+    if (!materialId || !Number.isFinite(materialId)) {
+      return NextResponse.json(
+        { success: false, error: '缺少或无效的 materialId' },
+        { status: 400 }
+      )
+    }
+
+    // 直接删除 materials。由于外键 on delete cascade，相关 ai_rewrite_tasks 与 rewrite_results 会级联删除
+    const { error } = await supabase
+      .from('materials')
+      .delete()
+      .eq('id', materialId)
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('删除素材失败:', error)
+    return NextResponse.json(
+      { success: false, error: '删除素材失败' },
+      { status: 500 }
+    )
+  }
+}

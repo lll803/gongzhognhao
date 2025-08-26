@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/select'
 import { Material, MaterialStatus, AIRewriteStatus, RewriteStyle } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
+import { DashboardHeader } from '@/components/dashboard-header'
 
 interface MaterialWithRewrite extends Material {
   aiRewriteTask?: {
@@ -235,225 +236,246 @@ export default function MaterialsPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">素材库</h1>
-          <p className="text-muted-foreground mt-2">
-            管理从热榜收集的素材内容和AI改写结果
-          </p>
+    <div className="min-h-screen bg-background">
+      <DashboardHeader />
+      <main className="container mx-auto py-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">素材库</h1>
+            <p className="text-muted-foreground mt-2">
+              管理从热榜收集的素材内容和AI改写结果
+            </p>
+          </div>
         </div>
-      </div>
-
-      {/* 筛选和搜索 */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="搜索标题或描述..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="max-w-sm"
-              />
+ 
+        {/* 筛选和搜索 */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <Input
+                  placeholder="搜索标题或描述..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="max-w-sm"
+                />
+              </div>
+              <Select
+                className="w-32"
+                value={statusFilter as any}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+              >
+                <option value="all">全部状态</option>
+                <option value={MaterialStatus.ACTIVE}>活跃</option>
+                <option value={MaterialStatus.ARCHIVED}>已归档</option>
+                <option value={MaterialStatus.DELETED}>已删除</option>
+              </Select>
+              <Select
+                className="w-32"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="">全部分类</option>
+                <option value="hot-trending">热榜趋势</option>
+                <option value="wechat">微信文章</option>
+                <option value="other">其他</option>
+              </Select>
             </div>
-            <Select
-              className="w-32"
-              value={statusFilter as any}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-            >
-              <option value="all">全部状态</option>
-              <option value={MaterialStatus.ACTIVE}>活跃</option>
-              <option value={MaterialStatus.ARCHIVED}>已归档</option>
-              <option value={MaterialStatus.DELETED}>已删除</option>
-            </Select>
-            <Select
-              className="w-32"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="">全部分类</option>
-              <option value="hot-trending">热榜趋势</option>
-              <option value="wechat">微信文章</option>
-              <option value="other">其他</option>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 素材列表 */}
-      <div className="space-y-4">
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="text-muted-foreground">加载中...</div>
-          </div>
-        ) : materials.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <div className="text-muted-foreground">
-                {search || statusFilter !== 'all' || categoryFilter ? '没有找到匹配的素材' : '暂无素材'}
-              </div>
-              <div className="text-sm text-muted-foreground mt-2">
-                去热榜页面添加一些素材吧
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {materials.map((material) => {
-              const illustrate = (material as any)?.extra_data?.illustrate
-              const illustratedMd: string | undefined = illustrate?.contentWithImages
-              return (
-                <Card key={material.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex flex-col lg:flex-row gap-4">
-                      {/* 左侧：素材信息 */}
-                      <div className="flex-1 space-y-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold line-clamp-2">{material.title}</h3>
-                            {material.description && (
-                              <p className="text-muted-foreground mt-2 line-clamp-3">{material.description}</p>
-                            )}
-                          </div>
-                          <div className="flex-shrink-0 flex items-center gap-2">
-                            {getStatusBadge(material.status)}
-                            {getRewriteStatusBadge(material.aiRewriteTask)}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                          <span>来源: {material.sourcePlatform}</span>
-                          {material.sourceRank && <span>排名: {material.sourceRank}</span>}
-                          {material.sourceHotValue && <span>热度: {material.sourceHotValue.toLocaleString()}</span>}
-                          <span>添加时间: {formatRelativeTime(material.createdAt)}</span>
-                        </div>
-
-                        {material.tags && material.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {material.tags.map((tag, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-2">
-                          {normalizeExternalUrl(material.sourceUrl) ? (
-                            <a
-                              href={normalizeExternalUrl(material.sourceUrl) as string}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              className="text-blue-600 hover:text-blue-800 text-sm underline"
-                            >
-                              查看原文
-                            </a>
-                          ) : (
-                            <button
-                              type="button"
-                              className="text-gray-400 text-sm cursor-not-allowed"
-                              title="无效的原文链接"
-                              onClick={(e) => e.preventDefault()}
-                            >
-                              查看原文
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 右侧：AI改写状态和操作 */}
-                      <div className="flex-shrink-0 space-y-3 min-w-48">
-                        {material.aiRewriteTask ? (
-                          <div className="space-y-2">
-                            <div className="text-sm">
-                              <span className="text-muted-foreground">改写风格: </span>
-                              <span>{getRewriteStyleLabel(material.aiRewriteTask.rewriteStyle)}</span>
+          </CardContent>
+        </Card>
+ 
+        {/* 素材列表 */}
+        <div className="space-y-4">
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="text-muted-foreground">加载中...</div>
+            </div>
+          ) : materials.length === 0 ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <div className="text-muted-foreground">
+                  {search || statusFilter !== 'all' || categoryFilter ? '没有找到匹配的素材' : '暂无素材'}
+                </div>
+                <div className="text-sm text-muted-foreground mt-2">
+                  去热榜页面添加一些素材吧
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {materials.map((material) => {
+                const illustrate = (material as any)?.extra_data?.illustrate
+                const illustratedMd: string | undefined = illustrate?.contentWithImages
+                return (
+                  <Card key={material.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col lg:flex-row gap-4">
+                        {/* 左侧：素材信息 */}
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <h3 className="text-lg font-semibold line-clamp-2">{material.title}</h3>
+                              {material.description && (
+                                <p className="text-muted-foreground mt-2 line-clamp-3">{material.description}</p>
+                              )}
                             </div>
-                            {material.aiRewriteTask.status === 'completed' && (
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">完成时间: </span>
-                                <span>{formatRelativeTime(material.aiRewriteTask.completedAt!)}</span>
-                              </div>
-                            )}
-                            {material.aiRewriteTask.status === 'failed' && (
-                              <div className="text-sm text-red-600">
-                                错误: {material.aiRewriteTask.errorMessage}
-                              </div>
+                            <div className="flex-shrink-0 flex items-center gap-2">
+                              {getStatusBadge(material.status)}
+                              {getRewriteStatusBadge(material.aiRewriteTask)}
+                            </div>
+                          </div>
+ 
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                            <span>来源: {material.sourcePlatform}</span>
+                            {material.sourceRank && <span>排名: {material.sourceRank}</span>}
+                            {material.sourceHotValue && <span>热度: {material.sourceHotValue.toLocaleString()}</span>}
+                            <span>添加时间: {formatRelativeTime(material.createdAt)}</span>
+                          </div>
+ 
+                          {material.tags && material.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {material.tags.map((tag, index) => (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+ 
+                          <div className="flex items-center gap-2">
+                            {normalizeExternalUrl(material.sourceUrl) ? (
+                              <a
+                                href={normalizeExternalUrl(material.sourceUrl) as string}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="text-blue-600 hover:text-blue-800 text-sm underline"
+                              >
+                                查看原文
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                className="text-gray-400 text-sm cursor-not-allowed"
+                                title="无效的原文链接"
+                                onClick={(e) => e.preventDefault()}
+                              >
+                                查看原文
+                              </button>
                             )}
                           </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">未开始AI改写</div>
-                        )}
+                        </div>
+ 
+                        {/* 右侧：AI改写状态和操作 */}
+                        <div className="flex-shrink-0 space-y-3 min-w-48">
+                          {material.aiRewriteTask ? (
+                            <div className="space-y-2">
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">改写风格: </span>
+                                <span>{getRewriteStyleLabel(material.aiRewriteTask.rewriteStyle)}</span>
+                              </div>
+                              {material.aiRewriteTask.status === 'completed' && (
+                                <div className="text-sm">
+                                  <span className="text-muted-foreground">完成时间: </span>
+                                  <span>{formatRelativeTime(material.aiRewriteTask.completedAt!)}</span>
+                                </div>
+                              )}
+                              {material.aiRewriteTask.status === 'failed' && (
+                                <div className="text-sm text-red-600">
+                                  错误: {material.aiRewriteTask.errorMessage}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-muted-foreground">未开始AI改写</div>
+                          )}
+ 
+                          <div className="space-y-2">
+                            {!material.aiRewriteTask || 
+                             material.aiRewriteTask.status === 'failed' ? (
+                              <Button
+                                size="sm"
+                                onClick={() => triggerRewrite(material.id)}
+                                className="w-full"
+                              >
+                                开始AI改写
+                              </Button>
+                            ) : material.aiRewriteTask.status === 'completed' ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => triggerRewrite(material.id)}
+                                className="w-full"
+                              >
+                                重新改写
+                              </Button>
+                            ) : null}
+ 
+                            {material.aiRewriteTask?.status === 'completed' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                  window.location.href = `/articles/${material.id}`
+                                }}
+                              >
+                                查看改写结果
+                              </Button>
+                            )}
 
-                        <div className="space-y-2">
-                          {!material.aiRewriteTask || 
-                           material.aiRewriteTask.status === 'failed' ? (
                             <Button
                               size="sm"
-                              onClick={() => triggerRewrite(material.id)}
+                              variant="destructive"
                               className="w-full"
-                            >
-                              开始AI改写
-                            </Button>
-                          ) : material.aiRewriteTask.status === 'completed' ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => triggerRewrite(material.id)}
-                              className="w-full"
-                            >
-                              重新改写
-                            </Button>
-                          ) : null}
-
-                          {material.aiRewriteTask?.status === 'completed' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="w-full"
-                              onClick={() => {
-                                window.location.href = `/articles/${material.id}`
+                              onClick={async () => {
+                                if (!confirm('确定要删除该素材（及关联的改写任务与结果）吗？')) return
+                                try {
+                                  const res = await fetch(`/api/materials?materialId=${material.id}`, { method: 'DELETE' })
+                                  if (!res.ok) throw new Error('删除失败')
+                                  setMaterials(prev => prev.filter(m => m.id !== material.id))
+                                } catch (e) {
+                                  pushToast({ type: 'error', title: '删除失败', description: '请稍后重试' })
+                                }
                               }}
                             >
-                              查看改写结果
+                              删除素材
                             </Button>
-                          )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </div>
+ 
+        {/* 分页 */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              上一页
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              第 {page} 页，共 {totalPages} 页
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              下一页
+            </Button>
           </div>
         )}
-      </div>
-
-      {/* 分页 */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            上一页
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            第 {page} 页，共 {totalPages} 页
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-          >
-            下一页
-          </Button>
-        </div>
-      )}
+      </main>
     </div>
   )
 }
