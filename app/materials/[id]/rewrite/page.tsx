@@ -103,52 +103,17 @@ export default function RewriteResultPage() {
     console.log(`开始加载改写数据，素材ID: ${materialId}，重试次数: ${retryCount}`) // 调试日志
     
     try {
-      // 尝试多种查询方式
-      let task = null
+      // 尝试获取改写任务
+      const taskUrl = `/api/ai/rewrite?materialId=${materialId}`
+      console.log('查询改写任务:', taskUrl)
       
-      // 方式1：直接查询
-      const taskUrl1 = `/api/ai/rewrite?materialId=${materialId}`
-      console.log('尝试方式1 - 直接查询:', taskUrl1)
+      const taskResponse = await fetch(taskUrl)
+      const taskResult = await taskResponse.json()
+      console.log('改写任务查询结果:', taskResult)
       
-      const taskResponse1 = await fetch(taskUrl1)
-      const taskResult1 = await taskResponse1.json()
-      console.log('方式1结果:', taskResult1)
-      
-      if (taskResult1.success && taskResult1.data.length > 0) {
-        task = taskResult1.data[0]
-        console.log('方式1成功，找到任务:', task)
-      } else {
-        // 方式2：使用taskId查询（如果知道的话）
-        console.log('方式1失败，尝试方式2 - 延迟查询')
-        await new Promise(resolve => setTimeout(resolve, 1000)) // 延迟1秒
-        
-        const taskResponse2 = await fetch(taskUrl1)
-        const taskResult2 = await taskResponse2.json()
-        console.log('方式2结果:', taskResult2)
-        
-        if (taskResult2.success && taskResult2.data.length > 0) {
-          task = taskResult2.data[0]
-          console.log('方式2成功，找到任务:', task)
-        } else {
-          // 方式3：尝试获取所有任务，然后过滤
-          console.log('方式2失败，尝试方式3 - 获取所有任务')
-          const allTasksUrl = '/api/ai/rewrite'
-          const allTasksResponse = await fetch(allTasksUrl)
-          const allTasksResult = await allTasksResponse.json()
-          console.log('所有任务结果:', allTasksResult)
-          
-          if (allTasksResult.success && allTasksResult.data.length > 0) {
-            const foundTask = allTasksResult.data.find((t: any) => t.material_id === materialId)
-            if (foundTask) {
-              task = foundTask
-              console.log('方式3成功，找到任务:', task)
-            }
-          }
-        }
-      }
-
-      if (task) {
-        console.log('最终找到改写任务:', task) // 调试日志
+      if (taskResult.success && taskResult.data.length > 0) {
+        const task = taskResult.data[0]
+        console.log('找到改写任务:', task)
         
         // 修复字段映射
         const mappedTask = {
@@ -166,86 +131,95 @@ export default function RewriteResultPage() {
           updatedAt: new Date(task.updated_at),
         }
         
-        console.log('映射后的任务数据:', mappedTask) // 调试日志
+        console.log('映射后的任务数据:', mappedTask)
         setRewriteTask(mappedTask)
 
         // 如果有改写结果，加载结果详情
         if (task.status === 'completed') {
-          console.log('任务已完成，开始加载改写结果') // 调试日志
+          console.log('任务已完成，开始加载改写结果')
           
-          // 从改写结果表获取详细数据
-          const resultUrl = `/api/rewrite-results?taskId=${task.id}`
-          console.log('调用改写结果API:', resultUrl) // 调试日志
-          
-          const resultResponse = await fetch(resultUrl)
-          const resultData = await resultResponse.json()
-          console.log('改写结果API响应:', resultData) // 调试日志
-          
-          if (resultData.success && resultData.data.length > 0) {
-            const result = resultData.data[0]
-            console.log('找到改写结果:', result) // 调试日志
+          try {
+            // 从改写结果表获取详细数据
+            const resultUrl = `/api/rewrite-results?taskId=${task.id}`
+            console.log('调用改写结果API:', resultUrl)
             
-            setRewriteResult({
-              id: result.id,
-              taskId: result.task_id,
-              materialId: result.material_id,
-              originalTitle: result.original_title || '',
-              rewrittenTitle: result.rewritten_title || '',
-              originalDescription: result.original_description || '',
-              rewrittenDescription: result.rewritten_description || '',
-              originalContent: result.original_content || '',
-              rewrittenContent: result.rewritten_content || '',
-              rewriteStyle: result.rewrite_style,
-              qualityScore: result.quality_score,
-              wordCount: result.word_count || 0,
-              processingTimeMs: result.processing_time_ms,
-              createdAt: new Date(result.created_at),
-            })
-          } else {
-            console.log('未找到改写结果，使用任务数据作为后备') // 调试日志
+            const resultResponse = await fetch(resultUrl)
+            const resultData = await resultResponse.json()
+            console.log('改写结果API响应:', resultData)
             
-            // 如果没有找到改写结果，使用任务数据作为后备
-            setRewriteResult({
-              id: task.id,
-              taskId: task.id,
-              materialId: task.material_id,
-              originalTitle: material?.title || '',
-              rewrittenTitle: material?.title || '',
-              originalDescription: material?.description || '',
-              rewrittenDescription: material?.description || '',
-              originalContent: task.original_content || '',
-              rewrittenContent: task.rewritten_content || '',
-              rewriteStyle: task.rewrite_style,
-              wordCount: task.rewritten_content?.length || 0,
-              processingTimeMs: task.completed_at && task.processing_started_at 
-                ? new Date(task.completed_at).getTime() - new Date(task.processing_started_at).getTime()
-                : undefined,
-              createdAt: new Date(task.created_at),
-            })
+            if (resultData.success && resultData.data.length > 0) {
+              const result = resultData.data[0]
+              console.log('找到改写结果:', result)
+              
+              setRewriteResult({
+                id: result.id,
+                taskId: result.task_id,
+                materialId: result.material_id,
+                originalTitle: result.original_title || '',
+                rewrittenTitle: result.rewritten_title || '',
+                originalDescription: result.original_description || '',
+                rewrittenDescription: result.rewritten_description || '',
+                originalContent: result.original_content || '',
+                rewrittenContent: result.rewritten_content || '',
+                rewriteStyle: result.rewrite_style,
+                qualityScore: result.quality_score,
+                wordCount: result.word_count || 0,
+                processingTimeMs: result.processing_time_ms,
+                createdAt: new Date(result.created_at),
+              })
+            } else {
+              console.log('未找到改写结果，使用任务数据作为后备')
+              
+              // 如果没有找到改写结果，使用任务数据作为后备
+              setRewriteResult({
+                id: task.id,
+                taskId: task.id,
+                materialId: task.material_id,
+                originalTitle: material?.title || '',
+                rewrittenTitle: material?.title || '',
+                originalDescription: material?.description || '',
+                rewrittenDescription: material?.description || '',
+                originalContent: task.original_content || '',
+                rewrittenContent: task.rewritten_content || '',
+                rewriteStyle: task.rewrite_style,
+                wordCount: task.rewritten_content?.length || 0,
+                processingTimeMs: task.completed_at && task.processing_started_at 
+                  ? new Date(task.completed_at).getTime() - new Date(task.processing_started_at).getTime()
+                  : undefined,
+                createdAt: new Date(task.created_at),
+              })
+            }
+          } catch (resultError) {
+            console.error('加载改写结果失败:', resultError)
+            // 即使改写结果加载失败，也不影响任务显示
           }
         } else {
-          console.log('任务状态不是completed:', task.status) // 调试日志
+          console.log('任务状态不是completed:', task.status)
         }
       } else {
-        console.log('所有查询方式都失败，未找到改写任务') // 调试日志
+        console.log('未找到改写任务')
         
-        // 如果所有方式都失败且重试次数少于3次，则重试
-        if (retryCount < 3) {
-          console.log(`重试获取改写任务，第${retryCount + 1}次重试`) // 调试日志
+        // 只有在重试次数少于2次时才重试，避免无限循环
+        if (retryCount < 2) {
+          console.log(`重试获取改写任务，第${retryCount + 1}次重试`)
           setTimeout(() => {
             loadRewriteData(retryCount + 1)
-          }, 2000 * (retryCount + 1)) // 递增延迟
+          }, 3000) // 固定3秒延迟
+        } else {
+          console.log('重试次数已达上限，停止重试')
         }
       }
     } catch (error) {
       console.error('加载改写数据失败:', error)
       
-      // 如果出错且重试次数少于3次，则重试
-      if (retryCount < 3) {
-        console.log(`重试获取改写任务，第${retryCount + 1}次重试`) // 调试日志
+      // 只有在重试次数少于2次时才重试
+      if (retryCount < 2) {
+        console.log(`重试获取改写任务，第${retryCount + 1}次重试`)
         setTimeout(() => {
           loadRewriteData(retryCount + 1)
-        }, 2000 * (retryCount + 1)) // 递增延迟
+        }, 3000) // 固定3秒延迟
+      } else {
+        console.log('重试次数已达上限，停止重试')
       }
     }
   }, [material, materialId])
@@ -656,7 +630,7 @@ export default function RewriteResultPage() {
                 </div>
                 {rewriteTask.status === 'completed' && (
                   <div className="mt-4">
-                    <Button onClick={loadRewriteData} variant="outline">
+                    <Button onClick={() => loadRewriteData()} variant="outline">
                       重新加载
                     </Button>
                   </div>

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 interface TaskItem {
   id: number
@@ -31,51 +32,52 @@ export function RewriteResults() {
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set())
 
-  useEffect(() => {
-    const controller = new AbortController()
-    let timer: NodeJS.Timeout | null = null
-    
-    async function load() {
-      try {
-        setIsLoading(true)
-        setError(null)
-        
-        const res = await fetch('/api/ai/rewrite', { signal: controller.signal })
-        
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`)
-        }
-        
-        const json = await res.json()
-        
-        if (json?.success) {
-          setTasks(json.data || [])
-        } else {
-          throw new Error(json?.error || '获取改写任务失败')
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name !== 'AbortError') {
-          console.error('加载改写任务失败:', err)
-          setError(err.message)
-        }
-      } finally {
-        setIsLoading(false)
+  // 使用useCallback优化load函数，避免无限循环
+  const load = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch('/api/ai/rewrite', { signal })
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`)
       }
-    }
-    
-    load()
-    
-    // 设置定时刷新
-    timer = setInterval(load, 5000)
-    
-    return () => { 
-      controller.abort()
-      if (timer) clearInterval(timer)
+      
+      const json = await res.json()
+      
+      if (json?.success) {
+        setTasks(json.data || [])
+      } else {
+        throw new Error(json?.error || '获取改写任务失败')
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('加载改写任务失败:', err)
+        setError(err.message)
+      }
+    } finally {
+      setIsLoading(false)
     }
   }, [])
 
-  const formatTime = (timeString: string) => {
+  useEffect(() => {
+    const controller = new AbortController()
+    
+    // 初始加载
+    load(controller.signal)
+    
+    // 设置定时刷新，但间隔更长一些
+    const timer = setInterval(() => {
+      load(controller.signal)
+    }, 10000) // 改为10秒刷新一次，减少频繁更新
+    
+    return () => { 
+      controller.abort()
+      clearInterval(timer)
+    }
+  }, [load]) // 只依赖load函数
+
+  const formatTime = useCallback((timeString: string) => {
     try {
       const date = new Date(timeString)
       const now = new Date()
@@ -91,18 +93,35 @@ export function RewriteResults() {
     } catch {
       return '未知时间'
     }
-  }
+  }, [])
 
-  const getStatusBadge = (status: TaskItem['status']) => {
+  const getStatusBadge = useCallback((status: TaskItem['status']) => {
     const config = statusConfig[status]
     return (
       <Badge className={config.color}>
         {config.label}
       </Badge>
     )
-  }
+  }, [])
 
-  if (isLoading) {
+  const toggleExpanded = useCallback((taskId: number) => {
+    setExpandedTasks(prev => {
+      const newExpanded = new Set(prev)
+      if (newExpanded.has(taskId)) {
+        newExpanded.delete(taskId)
+      } else {
+        newExpanded.add(taskId)
+      }
+      return newExpanded
+    })
+  }, [])
+
+  const isExpanded = useCallback((taskId: number) => {
+    return expandedTasks.has(taskId)
+  }, [expandedTasks])
+
+  // 如果正在加载且没有任务，显示骨架屏
+  if (isLoading && tasks.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -127,7 +146,7 @@ export function RewriteResults() {
           <div className="text-sm text-red-600 p-4 text-center">
             <p>加载失败: {error}</p>
             <Button 
-              onClick={() => window.location.reload()} 
+              onClick={() => load()} 
               variant="outline" 
               size="sm" 
               className="mt-2"
@@ -170,10 +189,43 @@ export function RewriteResults() {
               </div>
               
               {task.rewritten_content && (
-                <div className="mt-3 p-3 bg-gray-50 rounded-md">
-                  <div className="text-xs text-muted-foreground mb-2">改写结果:</div>
-                  <div className="text-sm whitespace-pre-wrap line-clamp-3">
-                    {task.rewritten_content}
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs text-muted-foreground">改写结果:</div>
+                  
+                  {/* 标题部分 */}
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <div className="text-xs text-muted-foreground mb-1">标题:</div>
+                    <div className="text-sm font-medium">
+                      {extractTitle(task.rewritten_content)}
+                    </div>
+                  </div>
+                  
+                  {/* 正文部分 */}
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <div className="text-xs text-muted-foreground mb-1">正文内容:</div>
+                    <div className={`text-sm ${isExpanded(task.id) ? '' : 'line-clamp-3'}`}>
+                      {extractContent(task.rewritten_content)}
+                    </div>
+                    
+                    {/* 展开/收起按钮 */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleExpanded(task.id)}
+                      className="mt-2 h-6 px-2 text-xs"
+                    >
+                      {isExpanded(task.id) ? (
+                        <>
+                          <ChevronUp className="w-3 h-3 mr-1" />
+                          收起
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-3 h-3 mr-1" />
+                          展开
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               )}
@@ -190,6 +242,48 @@ export function RewriteResults() {
       </CardContent>
     </Card>
   )
+}
+
+// 提取标题的辅助函数
+function extractTitle(content: string): string {
+  const lines = content.split('\n')
+  for (const line of lines) {
+    if (line.includes('标题:') || line.includes('Title:')) {
+      return line.replace(/^.*?[标题Title]:\s*/, '').trim()
+    }
+  }
+  // 如果没有找到标题标记，返回第一行
+  return lines[0]?.trim() || '无标题'
+}
+
+// 提取正文内容的辅助函数
+function extractContent(content: string): string {
+  const lines = content.split('\n')
+  const contentLines: string[] = []
+  let inContent = false
+  
+  for (const line of lines) {
+    if (line.includes('正文内容:') || line.includes('Body:') || line.includes('内容:')) {
+      inContent = true
+      continue
+    }
+    if (inContent && line.trim()) {
+      contentLines.push(line.trim())
+    }
+  }
+  
+  // 如果没有找到内容标记，返回除标题外的所有内容
+  if (contentLines.length === 0) {
+    const titleIndex = lines.findIndex(line => 
+      line.includes('标题:') || line.includes('Title:')
+    )
+    if (titleIndex >= 0) {
+      return lines.slice(titleIndex + 1).join('\n').trim()
+    }
+    return content.trim()
+  }
+  
+  return contentLines.join('\n')
 }
 
 
