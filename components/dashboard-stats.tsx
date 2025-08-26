@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   FileText, 
@@ -12,77 +13,78 @@ import {
   Share2
 } from 'lucide-react'
 
-const stats = [
-  {
-    title: '总文章数',
-    value: '1,234',
-    change: '+12%',
-    changeType: 'positive',
-    icon: FileText,
-    description: '较上月增长'
-  },
-  {
-    title: '今日采集',
-    value: '89',
-    change: '+5%',
-    changeType: 'positive',
-    icon: TrendingUp,
-    description: '较昨日增长'
-  },
-  {
-    title: '待发布',
-    value: '23',
-    change: '-3',
-    changeType: 'neutral',
-    icon: Clock,
-    description: '等待发布'
-  },
-  {
-    title: '已发布',
-    value: '1,156',
-    change: '+8%',
-    changeType: 'positive',
-    icon: CheckCircle,
-    description: '发布成功'
-  },
-  {
-    title: '活跃账号',
-    value: '5',
-    change: '+1',
-    changeType: 'positive',
-    icon: Users,
-    description: '公众号账号'
-  },
-  {
-    title: 'AI改写',
-    value: '456',
-    change: '+15%',
-    changeType: 'positive',
-    icon: Zap,
-    description: '改写完成'
-  },
-  {
-    title: '阅读量',
-    value: '89.2K',
-    change: '+22%',
-    changeType: 'positive',
-    icon: Eye,
-    description: '总阅读量'
-  },
-  {
-    title: '分享数',
-    value: '2.3K',
-    change: '+18%',
-    changeType: 'positive',
-    icon: Share2,
-    description: '总分享数'
-  }
-]
+interface Stats {
+  materials_total: number
+  materials_today: number
+  ai_tasks_total: number
+  ai_tasks_completed: number
+  ai_tasks_processing: number
+  ai_tasks_completed_24h: number
+  rewrite_results_total: number
+}
 
 export function DashboardStats() {
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setIsLoading(true)
+        setError(null)
+        const res = await fetch('/api/stats/overview', { cache: 'no-store' })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const json = await res.json()
+        if (json?.success) setStats(json.data)
+        else throw new Error(json?.error || '加载失败')
+      } catch (e: any) {
+        setError(e?.message || '加载失败')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  const cards = [
+    { title: '素材总数', value: stats?.materials_total ?? '-', icon: FileText, desc: '累计素材' },
+    { title: '今日新增', value: stats?.materials_today ?? '-', icon: TrendingUp, desc: '今日入库' },
+    { title: '改写进行中', value: stats?.ai_tasks_processing ?? '-', icon: Clock, desc: '队列中' },
+    { title: '改写完成', value: stats?.ai_tasks_completed ?? '-', icon: CheckCircle, desc: '累计完成' },
+    { title: '改写总任务', value: stats?.ai_tasks_total ?? '-', icon: Zap, desc: '累计创建' },
+    { title: '24小时完成', value: stats?.ai_tasks_completed_24h ?? '-', icon: Eye, desc: '近24小时' },
+    { title: '结果总数', value: stats?.rewrite_results_total ?? '-', icon: Share2, desc: '改写结果' },
+  ]
+
+  if (isLoading) {
+    return (
+      <>
+        {Array.from({ length: cards.length }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground">加载中...</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-8 bg-muted rounded" />
+            </CardContent>
+          </Card>
+        ))}
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-red-600">{error}</CardContent>
+      </Card>
+    )
+  }
+
   return (
     <>
-      {stats.map((stat) => (
+      {cards.map((stat) => (
         <Card key={stat.title} className="hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -91,17 +93,8 @@ export function DashboardStats() {
             <stat.icon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-secondary">{stat.value}</div>
-            <div className="flex items-center space-x-2 text-xs text-muted-foreground mt-1">
-              <span className={`
-                ${stat.changeType === 'positive' ? 'text-emerald-600' : ''}
-                ${stat.changeType === 'negative' ? 'text-red-600' : ''}
-                ${stat.changeType === 'neutral' ? 'text-gray-600' : ''}
-              `}>
-                {stat.change}
-              </span>
-              <span>{stat.description}</span>
-            </div>
+            <div className="text-3xl font-bold text-secondary">{String(stat.value)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{stat.desc}</div>
           </CardContent>
         </Card>
       ))}
