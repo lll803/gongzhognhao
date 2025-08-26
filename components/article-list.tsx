@@ -206,6 +206,62 @@ export function ArticleList() {
     }
   }, [])
 
+  // 将 Markdown（仅段落与图片）转换为微信公众号可粘贴的简洁 HTML，并为图片提供占位，后续统一重传到本域可外链
+  function mdToWeChatHtml(md: string): string {
+    if (!md) return ''
+    let html = md.replace(/\r\n/g, '\n')
+    const imgRe = /!\[[^\]]*\]\(([^\)\s]+)(?:\s+\"[^\"]*\")?\)/g
+    const urls: string[] = []
+    html = html.replace(imgRe, (_m, url) => {
+      urls.push(url)
+      return `[[IMG:${url}]]`
+    })
+
+    const blocks = html.split(/\n{2,}/).map(b => b.trim()).filter(Boolean)
+    html = blocks
+      .map(block => {
+        if (/^\[\[IMG:/.test(block)) return block
+        const text = block.replace(/\n/g, '<br/>')
+        return `<p>${text}</p>`
+      })
+      .join('\n')
+
+    return `<div data-img-urls='${JSON.stringify(urls)}'>${html}</div>`
+  }
+
+  async function copyWeChatHtml(md?: string) {
+    if (!md) return
+    let html = mdToWeChatHtml(md)
+    // 若包含图片，占位符替换为本域重传后的可外链URL
+    try {
+      const m = html.match(/data-img-urls='([^']*)'/)
+      const raw = m ? JSON.parse(m[1]) as string[] : []
+      if (raw.length > 0) {
+        const res = await fetch('/api/images/rehost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls: raw }) })
+        const json = await res.json()
+        const map: Record<string, string> = json?.data?.map || {}
+        html = html
+          .replace(/\[\[IMG:([^\]]+)\]\]/g, (_mm, url) => `<p style="margin:0;padding:0;"><img src="${map[url] || url}" style="max-width:100%;width:100%;height:auto;display:block;"/></p>`)
+          .replace(/ data-img-urls='[^']*'/, '')
+      }
+    } catch {}
+    try {
+      if ((window as any).ClipboardItem) {
+        const item = new (window as any).ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([html], { type: 'text/plain' }),
+        })
+        await (navigator as any).clipboard.write([item])
+      } else {
+        await navigator.clipboard.writeText(html)
+      }
+      console.log('公众号HTML已复制')
+    } catch (e) {
+      console.error('复制公众号HTML失败', e)
+      await navigator.clipboard.writeText(html)
+    }
+  }
+
   const formatTime = useCallback((timeString: string) => {
     try {
       const date = new Date(timeString)
@@ -443,13 +499,26 @@ export function ArticleList() {
                           复制配图Markdown
                         </Button>
                       )}
+                      {md && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyWeChatHtml(md)}
+                        >
+                          <Copy className="w-3 h-3 mr-1" />
+                          复制公众号HTML
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {md && (
                     <div className="border rounded-md">
                       <div className="flex items-center justify-between p-2">
                         <span className="text-sm text-muted-foreground">配图后的Markdown</span>
-                        <Button size="sm" variant="ghost" onClick={() => copyToClipboard(md, '配图Markdown')}>复制</Button>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => copyToClipboard(md, '配图Markdown')}>复制MD</Button>
+                          <Button size="sm" variant="ghost" onClick={() => copyWeChatHtml(md)}>复制HTML</Button>
+                        </div>
                       </div>
                       <div className="p-3 bg-gray-50 rounded-b-md">
                         <pre className="whitespace-pre-wrap text-sm">{md}</pre>

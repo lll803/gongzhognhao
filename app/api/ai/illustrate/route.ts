@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 import { buildIllustrationPlan, generateImageWithFal, injectImagesIntoMarkdown } from '@/lib/ai-images'
 
 const supabase = createClient(
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
     const plan = await buildIllustrationPlan(title, content)
 
     // 2) 生成封面和分段插图
-    const imgs: Array<{ index: number; url: string }> = []
+    let imgs: Array<{ index: number; url: string }> = []
     // 封面作为 index -1，使用公众号封面尺寸 900x383
     try {
       const coverUrl = await generateImageWithFal(plan.coverPrompt, { width: 900, height: 383 })
@@ -62,7 +63,36 @@ export async function POST(req: NextRequest) {
     }
 
     // 3) 将图片均匀插入到正文（markdown）
-    const md = injectImagesIntoMarkdown(content, imgs.map((it) => ({ index: it.index, url: it.url })), plan.paragraphPrompts.map(p => ({ index: p.index, text: p.text })))
+    let md = injectImagesIntoMarkdown(content, imgs.map((it) => ({ index: it.index, url: it.url })), plan.paragraphPrompts.map(p => ({ index: p.index, text: p.text })))
+
+    // 3.1) 重传图片到自有存储，并替换为稳定外链
+    try {
+      const bucket = 'images'
+      const uniqueUrls = Array.from(new Set(imgs.map(i => i.url).filter(Boolean))) as string[]
+      const urlMap: Record<string, string> = {}
+      for (const url of uniqueUrls) {
+        try {
+          const r = await fetch(url)
+          if (!r.ok) continue
+          const arrayBuf = await r.arrayBuffer()
+          const buf = Buffer.from(arrayBuf)
+          const ct = r.headers.get('content-type') || 'image/jpeg'
+          const ext = guessExt(url, ct)
+          const hash = crypto.createHash('md5').update(buf).digest('hex').slice(0, 16)
+          const path = `articles/${hash}.${ext}`
+          const { error: upErr } = await supabase.storage.from(bucket).upload(path, buf, { contentType: ct, upsert: true })
+          if (upErr) continue
+          const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+          urlMap[url] = data.publicUrl
+        } catch {}
+      }
+
+      // 替换 imgs 与 markdown
+      if (Object.keys(urlMap).length > 0) {
+        imgs = imgs.map(i => ({ index: i.index, url: urlMap[i.url] || i.url }))
+        md = md.replace(/!\[[^\]]*\]\(([^\)\s]+)(?:\s+\"[^\"]*\")?\)/g, (m, url) => m.replace(url, urlMap[url] || url))
+      }
+    } catch {}
 
     // 3.5) 将封面与配图后的正文写回素材库，方便内容管理展示
     try {
@@ -94,4 +124,14 @@ export async function POST(req: NextRequest) {
     console.error('AI配图失败:', error)
     return NextResponse.json({ success: false, error: 'AI配图失败' }, { status: 500 })
   }
+}
+
+function guessExt(url: string, contentType: string): string {
+  const ct = (contentType || '').toLowerCase()
+  if (ct.includes('png')) return 'png'
+  if (ct.includes('webp')) return 'webp'
+  if (ct.includes('gif')) return 'gif'
+  if (ct.includes('jpeg') || ct.includes('jpg')) return 'jpg'
+  const m = url.match(/\.(png|webp|gif|jpe?g)(?:\?|#|$)/i)
+  return m?.[1]?.toLowerCase().replace('jpeg','jpg') || 'jpg'
 }

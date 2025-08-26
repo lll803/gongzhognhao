@@ -88,11 +88,11 @@ export function RewriteForm() {
       <CardHeader>
         <CardTitle className="text-base">改写设置</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 max-w-full overflow-x-hidden">
         <div className="space-y-2">
           <label className="text-sm font-medium">素材ID（支持批量）</label>
           <Textarea
-            className="w-full"
+            className="w-full max-w-full"
             placeholder="输入一个或多个素材ID，逗号/空格/换行分隔。例：12, 15 18\n或者每行一个：\n12\n15\n18"
             value={materialIdsInput}
             onChange={e => setMaterialIdsInput(e.target.value)}
@@ -107,7 +107,7 @@ export function RewriteForm() {
         <div className="space-y-2">
           <label className="text-sm font-medium">改写风格</label>
           <Select 
-            className="w-full" 
+            className="w-full max-w-full" 
             value={style} 
             onChange={(e) => setStyle(e.target.value)}
           >

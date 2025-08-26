@@ -144,7 +144,7 @@ export function ArticleSelector() {
       <CardHeader>
         <CardTitle className="text-base">选择素材</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 max-w-full overflow-x-hidden">
         <Input 
           placeholder="搜索素材..." 
           value={search} 
@@ -154,12 +154,12 @@ export function ArticleSelector() {
           {materials.map(m => (
             <div 
               key={m.id} 
-              className="p-3 border rounded-md hover:bg-accent/5 cursor-pointer transition-colors" 
+              className="p-3 border rounded-md hover:bg-accent/5 cursor-pointer transition-colors"
               onClick={() => handleMaterialClick(m.id)}
               title="点击复制ID"
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="font-medium text-sm line-clamp-1">{m.title}</div>
+                <div className="font-medium text-sm line-clamp-1 break-all">{m.title}</div>
                 {m.sourcePlatform && (
                   <Badge variant="outline" className="text-xs">
                     {m.sourcePlatform}
@@ -167,7 +167,7 @@ export function ArticleSelector() {
                 )}
               </div>
               {m.description && (
-                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                <div className="text-xs text-muted-foreground mt-1 line-clamp-2 break-all">
                   {m.description}
                 </div>
               )}

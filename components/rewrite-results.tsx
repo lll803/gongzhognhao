@@ -38,6 +38,38 @@ export function RewriteResults() {
   const [illustratingTaskId, setIllustratingTaskId] = useState<number | null>(null)
   const [illustratedMarkdownByTask, setIllustratedMarkdownByTask] = useState<Record<number, string>>({})
 
+  // 将 Markdown（段落+图片）转公众号可粘贴 HTML
+  function mdToWeChatHtml(md: string): string {
+    if (!md) return ''
+    let html = md.replace(/\r\n/g, '\n')
+    // 图片占位处理
+    const imgRe = /!\[[^\]]*\]\(([^\)\s]+)(?:\s+\"[^\"]*\")?\)/g
+    html = html.replace(imgRe, (_m, url) => `<p><img src="${url}" style="max-width:100%;height:auto;"/></p>`)
+    const blocks = html.split(/\n{2,}/).map(b => b.trim()).filter(Boolean)
+    html = blocks.map(b => (/^<p><img/.test(b) ? b : `<p style="margin:0;padding:0;">${b.replace(/\n/g,'<br/>')}</p>`)).join('\n')
+    return `<div>${html}</div>`
+  }
+
+  async function copyWeChatHtml(md?: string) {
+    if (!md) return
+    const html = mdToWeChatHtml(md)
+    try {
+      if ((window as any).ClipboardItem) {
+        const item = new (window as any).ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([html], { type: 'text/plain' }),
+        })
+        await (navigator as any).clipboard.write([item])
+      } else {
+        await navigator.clipboard.writeText(html)
+      }
+      alert('已复制公众号HTML')
+    } catch {
+      await navigator.clipboard.writeText(html)
+      alert('已复制为纯文本HTML')
+    }
+  }
+
   // 使用useCallback优化load函数，避免无限循环
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -467,6 +499,15 @@ export function RewriteResults() {
                           }}
                         >
                           <Copy className="w-4 h-4 mr-1" />复制配图Markdown
+                        </Button>
+                      )}
+                      {illustratedMarkdownByTask[task.id] && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyWeChatHtml(illustratedMarkdownByTask[task.id])}
+                        >
+                          <Copy className="w-4 h-4 mr-1" />复制公众号HTML
                         </Button>
                       )}
                     </div>

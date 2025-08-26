@@ -25,7 +25,7 @@ export default function AIRewritePage() {
           <ConfigStatus />
         </Suspense>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3 max-w-full overflow-x-hidden">
           <div className="lg:col-span-1 space-y-6">
             <Suspense fallback={<Skeleton className="h-40 w-full" />}>
               <ArticleSelector />
