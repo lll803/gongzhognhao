@@ -69,7 +69,6 @@ export function HotItems() {
       for (let i = 0; i < TARGET_BOARDS.length; i++) {
         const board = TARGET_BOARDS[i]
         
-        // 更新状态为刷新中
         setBoardStatuses(prev => 
           prev.map(s => s.hashid === board.hashid ? { ...s, status: 'refreshing' } : s)
         )
@@ -99,13 +98,11 @@ export function HotItems() {
           )
         }
         
-        // 小延迟避免后端超时
         if (i < TARGET_BOARDS.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 500))
         }
       }
       
-      // 刷新完成后重新加载数据
       await loadItems()
       setLastRefreshTime(new Date())
     } finally {
@@ -113,7 +110,7 @@ export function HotItems() {
     }
   }
 
-  // 添加到素材库
+  // 添加到素材库（不再自动触发AI改写）
   async function addToMaterials(item: UiHotItem) {
     if (addingToMaterials.has(item.id)) return
 
@@ -151,11 +148,8 @@ export function HotItems() {
         pushToast({
           type: 'success',
           title: '添加成功',
-          description: '素材已添加到素材库，正在启动AI改写...',
+          description: '素材已添加到素材库（不再自动触发AI改写）',
         })
-
-        // 自动触发AI改写
-        await triggerAIRewrite(result.data.id)
       } else {
         pushToast({
           type: 'error',
@@ -176,36 +170,6 @@ export function HotItems() {
         newSet.delete(item.id)
         return newSet
       })
-    }
-  }
-
-  // 触发AI改写
-  async function triggerAIRewrite(materialId: number) {
-    try {
-      const response = await fetch('/api/ai/rewrite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          materialId,
-          rewriteStyle: 'professional',
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        pushToast({
-          type: 'success',
-          title: 'AI改写已启动',
-          description: '正在处理中，请稍后在素材库查看结果',
-        })
-      } else {
-        console.error('AI改写启动失败:', result.error)
-      }
-    } catch (error) {
-      console.error('AI改写启动失败:', error)
     }
   }
 

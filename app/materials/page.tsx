@@ -32,6 +32,24 @@ export default function MaterialsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const { push: pushToast } = useToast()
 
+  // 规范化 URL，确保可点击
+  function normalizeExternalUrl(url?: string | null): string | null {
+    if (!url) return null
+    try {
+      // 已有协议
+      const u = new URL(url)
+      return u.href
+    } catch {
+      // 尝试补全 https://
+      try {
+        const u2 = new URL(`https://${url}`)
+        return u2.href
+      } catch {
+        return null
+      }
+    }
+  }
+
   // 加载素材列表
   async function loadMaterials() {
     setLoading(true)
@@ -311,14 +329,25 @@ export default function MaterialsPage() {
                       )}
 
                       <div className="flex items-center gap-2">
-                        <a
-                          href={material.sourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 hover:text-blue-800 text-sm underline"
-                        >
-                          查看原文
-                        </a>
+                        {normalizeExternalUrl(material.sourceUrl) ? (
+                          <a
+                            href={normalizeExternalUrl(material.sourceUrl) as string}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="text-blue-600 hover:text-blue-800 text-sm underline"
+                          >
+                            查看原文
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-gray-400 text-sm cursor-not-allowed"
+                            title="无效的原文链接"
+                            onClick={(e) => e.preventDefault()}
+                          >
+                            查看原文
+                          </button>
+                        )}
                       </div>
                     </div>
 
