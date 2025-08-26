@@ -20,6 +20,7 @@ export function ArticleSelector() {
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<number | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -65,13 +66,35 @@ export function ArticleSelector() {
     return () => controller.abort()
   }, [search])
 
-  const handleMaterialClick = async (materialId: number) => {
+  async function copyText(text: string) {
     try {
-      await navigator.clipboard.writeText(String(materialId))
-      // 可以添加一个toast提示
-      console.log(`已复制素材ID: ${materialId}`)
-    } catch (err) {
-      console.error('复制失败:', err)
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text)
+        return true
+      }
+      // fallback
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      const success = document.execCommand('copy')
+      document.body.removeChild(textarea)
+      return success
+    } catch (e) {
+      return false
+    }
+  }
+
+  const handleMaterialClick = async (materialId: number) => {
+    const ok = await copyText(String(materialId))
+    if (ok) {
+      setCopiedId(materialId)
+      setTimeout(() => setCopiedId(null), 1500)
+    } else {
+      console.error('复制失败')
     }
   }
 
@@ -133,6 +156,7 @@ export function ArticleSelector() {
               key={m.id} 
               className="p-3 border rounded-md hover:bg-accent/5 cursor-pointer transition-colors" 
               onClick={() => handleMaterialClick(m.id)}
+              title="点击复制ID"
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="font-medium text-sm line-clamp-1">{m.title}</div>
@@ -147,8 +171,12 @@ export function ArticleSelector() {
                   {m.description}
                 </div>
               )}
-              <div className="text-[10px] text-muted-foreground mt-1">
-                点击复制ID：{m.id}
+              <div 
+                className="text-[10px] text-muted-foreground mt-1 underline-offset-2 hover:underline"
+                onClick={(e) => { e.stopPropagation(); handleMaterialClick(m.id) }}
+                role="button"
+              >
+                {copiedId === m.id ? '已复制' : `点击复制ID：${m.id}`}
               </div>
             </div>
           ))}

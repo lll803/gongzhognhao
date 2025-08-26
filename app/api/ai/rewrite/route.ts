@@ -8,16 +8,90 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// 创建AI改写任务
+// 创建AI改写任务（支持单个或批量）
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
       materialId,
+      materialIds,
       rewriteStyle = RewriteStyle.PROFESSIONAL,
       customPrompt,
     } = body
 
+    // 批量模式
+    if (Array.isArray(materialIds) && materialIds.length > 0) {
+      const ids = materialIds
+        .map((x: unknown) => Number(x))
+        .filter((n: number) => Number.isFinite(n) && n > 0)
+
+      if (ids.length === 0) {
+        return NextResponse.json(
+          { success: false, error: '提供的素材ID无效' },
+          { status: 400 }
+        )
+      }
+
+      const results: Array<{ materialId: number; taskId?: number; error?: string }> = []
+
+      // 顺序创建，避免速率限制；每个任务异步执行
+      for (const id of ids) {
+        try {
+          // 获取素材
+          const { data: material, error: materialError } = await supabase
+            .from('materials')
+            .select('*')
+            .eq('id', id)
+            .single()
+
+          if (materialError || !material) {
+            results.push({ materialId: id, error: '素材不存在' })
+            continue
+          }
+
+          // 跳过进行中的同素材任务
+          const { data: existingTask } = await supabase
+            .from('ai_rewrite_tasks')
+            .select('id, status')
+            .eq('material_id', id)
+            .in('status', ['pending', 'processing'])
+            .single()
+
+          if (existingTask) {
+            results.push({ materialId: id, error: '已有进行中的任务' })
+            continue
+          }
+
+          // 创建任务
+          const { data: task, error: taskError } = await supabase
+            .from('ai_rewrite_tasks')
+            .insert({
+              material_id: id,
+              status: 'pending',
+              original_content: material.title + (material.description ? '\n\n' + material.description : ''),
+              rewrite_style: rewriteStyle,
+              rewrite_prompt: customPrompt,
+            })
+            .select()
+            .single()
+
+          if (taskError || !task) {
+            results.push({ materialId: id, error: '创建任务失败' })
+            continue
+          }
+
+          // 异步执行
+          processAIRewriteTask(task.id, material, rewriteStyle, customPrompt)
+          results.push({ materialId: id, taskId: task.id })
+        } catch (e) {
+          results.push({ materialId: id, error: e instanceof Error ? e.message : '未知错误' })
+        }
+      }
+
+      return NextResponse.json({ success: true, data: { results } })
+    }
+
+    // 单个模式
     if (!materialId) {
       return NextResponse.json(
         { success: false, error: '素材ID为必填字段' },

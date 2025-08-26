@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 
 export function RewriteForm() {
-  const [materialId, setMaterialId] = useState('')
+  const [materialIdsInput, setMaterialIdsInput] = useState('')
   const [style, setStyle] = useState('professional')
   const [prompt, setPrompt] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -23,15 +23,17 @@ export function RewriteForm() {
     { value: 'creative', label: '创意新颖' },
   ]
 
-  async function submit() {
-    if (!materialId.trim()) {
-      setMessage({ type: 'error', text: '请输入素材ID' })
-      return
-    }
+  function parseIds(raw: string): number[] {
+    return raw
+      .split(/[\n,\s]+/)
+      .map(s => Number(s.trim()))
+      .filter(n => Number.isFinite(n) && n > 0)
+  }
 
-    const materialIdNum = Number(materialId)
-    if (isNaN(materialIdNum) || materialIdNum <= 0) {
-      setMessage({ type: 'error', text: '请输入有效的素材ID' })
+  async function submit() {
+    const ids = parseIds(materialIdsInput)
+    if (ids.length === 0) {
+      setMessage({ type: 'error', text: '请至少输入一个有效的素材ID' })
       return
     }
 
@@ -39,14 +41,14 @@ export function RewriteForm() {
       setIsSubmitting(true)
       setMessage(null)
 
+      const body = ids.length === 1
+        ? { materialId: ids[0], rewriteStyle: style, customPrompt: prompt.trim() || undefined }
+        : { materialIds: ids, rewriteStyle: style, customPrompt: prompt.trim() || undefined }
+
       const res = await fetch('/api/ai/rewrite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          materialId: materialIdNum, 
-          rewriteStyle: style, 
-          customPrompt: prompt.trim() || undefined 
-        })
+        body: JSON.stringify(body)
       })
 
       if (!res.ok) {
@@ -54,12 +56,17 @@ export function RewriteForm() {
       }
 
       const json = await res.json()
-      
+
       if (json?.success) {
-        setMessage({ type: 'success', text: 'AI改写任务已启动，请查看右侧结果' })
-        // 清空表单
-        setMaterialId('')
-        setPrompt('')
+        if (Array.isArray(json?.data?.results)) {
+          const total = json.data.results.length
+          const successCount = json.data.results.filter((r: any) => r.taskId).length
+          const failed = json.data.results.filter((r: any) => r.error)
+          setMessage({ type: 'success', text: `批量启动完成：成功 ${successCount}/${total}${failed.length ? `，失败 ${failed.length}` : ''}` })
+        } else {
+          setMessage({ type: 'success', text: 'AI改写任务已启动，请查看右侧结果' })
+        }
+        // 不清空输入，方便继续批量
       } else {
         throw new Error(json?.error || '启动AI改写失败')
       }
@@ -83,14 +90,18 @@ export function RewriteForm() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium">素材ID</label>
-          <Input
+          <label className="text-sm font-medium">素材ID（支持批量）</label>
+          <Textarea
             className="w-full"
-            placeholder="请输入素材ID（从左侧选择素材后复制）"
-            value={materialId}
-            onChange={e => setMaterialId(e.target.value)}
+            placeholder="输入一个或多个素材ID，逗号/空格/换行分隔。例：12, 15 18\n或者每行一个：\n12\n15\n18"
+            value={materialIdsInput}
+            onChange={e => setMaterialIdsInput(e.target.value)}
             onFocus={clearMessage}
+            rows={3}
           />
+          <div className="text-xs text-muted-foreground">
+            已识别ID：{parseIds(materialIdsInput).join(', ') || '无'}
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -135,17 +146,16 @@ export function RewriteForm() {
         <Button 
           onClick={submit} 
           className="w-full" 
-          disabled={isSubmitting || !materialId.trim()}
+          disabled={isSubmitting || parseIds(materialIdsInput).length === 0}
         >
           {isSubmitting ? '启动中...' : '开始改写'}
         </Button>
 
         <div className="text-xs text-muted-foreground space-y-1">
           <p>使用说明：</p>
-          <p>1. 从左侧选择要改写的素材</p>
-          <p>2. 点击素材复制其ID到上方输入框</p>
-          <p>3. 选择改写风格和添加自定义提示词</p>
-          <p>4. 点击"开始改写"启动AI处理</p>
+          <p>1. 在左侧选择素材并复制ID，或手动输入多个ID</p>
+          <p>2. 选择改写风格和添加自定义提示词</p>
+          <p>3. 点击"开始改写"，批量创建AI改写任务</p>
         </div>
       </CardContent>
     </Card>
