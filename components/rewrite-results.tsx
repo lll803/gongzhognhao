@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChevronDown, ChevronUp, Trash2, CheckSquare, Square } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, CheckSquare, Square, Image as ImageIcon, Copy } from 'lucide-react'
 
 interface TaskItem {
   id: number
@@ -35,6 +35,8 @@ export function RewriteResults() {
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set())
   const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set())
   const [isDeleting, setIsDeleting] = useState(false)
+  const [illustratingTaskId, setIllustratingTaskId] = useState<number | null>(null)
+  const [illustratedMarkdownByTask, setIllustratedMarkdownByTask] = useState<Record<number, string>>({})
 
   // 使用useCallback优化load函数，避免无限循环
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -78,6 +80,48 @@ export function RewriteResults() {
       clearInterval(timer)
     }
   }, [load]) // 只依赖load函数
+
+  // 从 localStorage 恢复已生成的配图Markdown，避免切换页面后丢失
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('illustratedMarkdownByTask')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed && typeof parsed === 'object') {
+          setIllustratedMarkdownByTask(parsed)
+        }
+      }
+    } catch {}
+  }, [])
+
+  // 将配图Markdown持久化到 localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('illustratedMarkdownByTask', JSON.stringify(illustratedMarkdownByTask))
+    } catch {}
+  }, [illustratedMarkdownByTask])
+
+  // 当展开某个任务时，从 DB 拉取 materials.extra_data.illustrate.contentWithImages 作为持久化来源
+  useEffect(() => {
+    const controller = new AbortController()
+    const loadForExpanded = async () => {
+      const needLoad = tasks.filter(t => expandedTasks.has(t.id) && !illustratedMarkdownByTask[t.id])
+      for (const t of needLoad) {
+        try {
+          const res = await fetch(`/api/materials?materialId=${t.material_id}`, { signal: controller.signal })
+          if (!res.ok) continue
+          const json = await res.json()
+          const mat = json?.data?.materials?.[0]
+          const md = mat?.extra_data?.illustrate?.contentWithImages
+          if (typeof md === 'string' && md.length > 0) {
+            setIllustratedMarkdownByTask(prev => ({ ...prev, [t.id]: md }))
+          }
+        } catch {}
+      }
+    }
+    loadForExpanded()
+    return () => controller.abort()
+  }, [expandedTasks, tasks])
 
   // 选择/取消选择任务
   const toggleTaskSelection = useCallback((taskId: number) => {
@@ -395,6 +439,48 @@ export function RewriteResults() {
                       <p className="whitespace-pre-wrap text-sm">
                         {cleanContent(task.rewritten_content)}
                       </p>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={illustratingTaskId === task.id}
+                        onClick={async () => {
+                          try {
+                            setIllustratingTaskId(task.id)
+                            const res = await fetch('/api/ai/illustrate', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ materialId: task.material_id }),
+                            })
+                            const json = await res.json()
+                            if (json?.success) {
+                              setIllustratedMarkdownByTask(prev => ({ ...prev, [task.id]: json.data.contentWithImages }))
+                            } else {
+                              alert(json?.error || 'AI配图失败')
+                            }
+                          } catch (e) {
+                            alert('AI配图失败')
+                          } finally {
+                            setIllustratingTaskId(null)
+                          }
+                        }}
+                      >
+                        <ImageIcon className="w-4 h-4 mr-1" />
+                        {illustratingTaskId === task.id ? '配图中...' : 'AI配图'}
+                      </Button>
+                      {illustratedMarkdownByTask[task.id] && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(illustratedMarkdownByTask[task.id])
+                            alert('已复制带图Markdown')
+                          }}
+                        >
+                          <Copy className="w-4 h-4 mr-1" />复制配图Markdown
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}

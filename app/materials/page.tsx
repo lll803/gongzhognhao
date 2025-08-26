@@ -226,6 +226,14 @@ export default function MaterialsPage() {
     }
   }, [materials])
 
+  async function copyIllustratedMarkdown(md?: string) {
+    if (!md) return
+    try {
+      await navigator.clipboard.writeText(md)
+      pushToast({ type: 'success', title: '已复制', description: '已复制配图 Markdown' })
+    } catch {}
+  }
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -292,128 +300,132 @@ export default function MaterialsPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {materials.map((material) => (
-              <Card key={material.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex flex-col lg:flex-row gap-4">
-                    {/* 左侧：素材信息 */}
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold line-clamp-2">{material.title}</h3>
-                          {material.description && (
-                            <p className="text-muted-foreground mt-2 line-clamp-3">{material.description}</p>
-                          )}
-                        </div>
-                        <div className="flex-shrink-0 flex items-center gap-2">
-                          {getStatusBadge(material.status)}
-                          {getRewriteStatusBadge(material.aiRewriteTask)}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                        <span>来源: {material.sourcePlatform}</span>
-                        {material.sourceRank && <span>排名: {material.sourceRank}</span>}
-                        {material.sourceHotValue && <span>热度: {material.sourceHotValue.toLocaleString()}</span>}
-                        <span>添加时间: {formatRelativeTime(material.createdAt)}</span>
-                      </div>
-
-                      {material.tags && material.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {material.tags.map((tag, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2">
-                        {normalizeExternalUrl(material.sourceUrl) ? (
-                          <a
-                            href={normalizeExternalUrl(material.sourceUrl) as string}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="text-blue-600 hover:text-blue-800 text-sm underline"
-                          >
-                            查看原文
-                          </a>
-                        ) : (
-                          <button
-                            type="button"
-                            className="text-gray-400 text-sm cursor-not-allowed"
-                            title="无效的原文链接"
-                            onClick={(e) => e.preventDefault()}
-                          >
-                            查看原文
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 右侧：AI改写状态和操作 */}
-                    <div className="flex-shrink-0 space-y-3 min-w-48">
-                      {material.aiRewriteTask ? (
-                        <div className="space-y-2">
-                          <div className="text-sm">
-                            <span className="text-muted-foreground">改写风格: </span>
-                            <span>{getRewriteStyleLabel(material.aiRewriteTask.rewriteStyle)}</span>
+            {materials.map((material) => {
+              const illustrate = (material as any)?.extra_data?.illustrate
+              const illustratedMd: string | undefined = illustrate?.contentWithImages
+              return (
+                <Card key={material.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row gap-4">
+                      {/* 左侧：素材信息 */}
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold line-clamp-2">{material.title}</h3>
+                            {material.description && (
+                              <p className="text-muted-foreground mt-2 line-clamp-3">{material.description}</p>
+                            )}
                           </div>
-                          {material.aiRewriteTask.status === 'completed' && (
-                            <div className="text-sm">
-                              <span className="text-muted-foreground">完成时间: </span>
-                              <span>{formatRelativeTime(material.aiRewriteTask.completedAt!)}</span>
-                            </div>
-                          )}
-                          {material.aiRewriteTask.status === 'failed' && (
-                            <div className="text-sm text-red-600">
-                              错误: {material.aiRewriteTask.errorMessage}
-                            </div>
+                          <div className="flex-shrink-0 flex items-center gap-2">
+                            {getStatusBadge(material.status)}
+                            {getRewriteStatusBadge(material.aiRewriteTask)}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                          <span>来源: {material.sourcePlatform}</span>
+                          {material.sourceRank && <span>排名: {material.sourceRank}</span>}
+                          {material.sourceHotValue && <span>热度: {material.sourceHotValue.toLocaleString()}</span>}
+                          <span>添加时间: {formatRelativeTime(material.createdAt)}</span>
+                        </div>
+
+                        {material.tags && material.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {material.tags.map((tag, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          {normalizeExternalUrl(material.sourceUrl) ? (
+                            <a
+                              href={normalizeExternalUrl(material.sourceUrl) as string}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="text-blue-600 hover:text-blue-800 text-sm underline"
+                            >
+                              查看原文
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-gray-400 text-sm cursor-not-allowed"
+                              title="无效的原文链接"
+                              onClick={(e) => e.preventDefault()}
+                            >
+                              查看原文
+                            </button>
                           )}
                         </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">未开始AI改写</div>
-                      )}
+                      </div>
 
-                      <div className="space-y-2">
-                        {!material.aiRewriteTask || 
-                         material.aiRewriteTask.status === 'failed' ? (
-                          <Button
-                            size="sm"
-                            onClick={() => triggerRewrite(material.id)}
-                            className="w-full"
-                          >
-                            开始AI改写
-                          </Button>
-                        ) : material.aiRewriteTask.status === 'completed' ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => triggerRewrite(material.id)}
-                            className="w-full"
-                          >
-                            重新改写
-                          </Button>
-                        ) : null}
-
-                        {material.aiRewriteTask?.status === 'completed' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full"
-                            onClick={() => {
-                              window.open(`/materials/${material.id}/rewrite`, '_blank')
-                            }}
-                          >
-                            查看改写结果
-                          </Button>
+                      {/* 右侧：AI改写状态和操作 */}
+                      <div className="flex-shrink-0 space-y-3 min-w-48">
+                        {material.aiRewriteTask ? (
+                          <div className="space-y-2">
+                            <div className="text-sm">
+                              <span className="text-muted-foreground">改写风格: </span>
+                              <span>{getRewriteStyleLabel(material.aiRewriteTask.rewriteStyle)}</span>
+                            </div>
+                            {material.aiRewriteTask.status === 'completed' && (
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">完成时间: </span>
+                                <span>{formatRelativeTime(material.aiRewriteTask.completedAt!)}</span>
+                              </div>
+                            )}
+                            {material.aiRewriteTask.status === 'failed' && (
+                              <div className="text-sm text-red-600">
+                                错误: {material.aiRewriteTask.errorMessage}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">未开始AI改写</div>
                         )}
+
+                        <div className="space-y-2">
+                          {!material.aiRewriteTask || 
+                           material.aiRewriteTask.status === 'failed' ? (
+                            <Button
+                              size="sm"
+                              onClick={() => triggerRewrite(material.id)}
+                              className="w-full"
+                            >
+                              开始AI改写
+                            </Button>
+                          ) : material.aiRewriteTask.status === 'completed' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => triggerRewrite(material.id)}
+                              className="w-full"
+                            >
+                              重新改写
+                            </Button>
+                          ) : null}
+
+                          {material.aiRewriteTask?.status === 'completed' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => {
+                                window.location.href = `/articles/${material.id}`
+                              }}
+                            >
+                              查看改写结果
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>

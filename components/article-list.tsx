@@ -29,6 +29,7 @@ export function ArticleList() {
   const [expandedArticles, setExpandedArticles] = useState<Set<number>>(new Set())
   const [selectedArticles, setSelectedArticles] = useState<Set<number>>(new Set())
   const [isDeleting, setIsDeleting] = useState(false)
+  const [illustratedMdByMaterial, setIllustratedMdByMaterial] = useState<Record<number, string>>({})
 
   const loadArticles = useCallback(async () => {
     try {
@@ -64,6 +65,39 @@ export function ArticleList() {
   useEffect(() => {
     loadArticles()
   }, [loadArticles])
+
+  // 如果带 materialId 查询参数，则高亮并自动展开对应文章
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const mid = Number(url.searchParams.get('materialId'))
+    if (!mid || !Array.isArray(articles) || articles.length === 0) return
+    const target = articles.find(a => a.material_id === mid)
+    if (target) {
+      setExpandedArticles(new Set([target.id]))
+    }
+  }, [articles])
+
+  // 当展开文章时，从 materials 读取带图Markdown
+  useEffect(() => {
+    const controller = new AbortController()
+    const toLoad = articles.filter(a => expandedArticles.has(a.id) && !illustratedMdByMaterial[a.material_id])
+    async function run() {
+      for (const a of toLoad) {
+        try {
+          const res = await fetch(`/api/materials?materialId=${a.material_id}`, { signal: controller.signal })
+          if (!res.ok) continue
+          const json = await res.json()
+          const mat = json?.data?.materials?.[0]
+          const md = mat?.extra_data?.illustrate?.contentWithImages
+          if (typeof md === 'string' && md.length > 0) {
+            setIllustratedMdByMaterial(prev => ({ ...prev, [a.material_id]: md }))
+          }
+        } catch {}
+      }
+    }
+    run()
+    return () => controller.abort()
+  }, [expandedArticles, articles])
 
   // 选择/取消选择文章
   const toggleArticleSelection = useCallback((articleId: number) => {
@@ -320,111 +354,124 @@ export function ArticleList() {
       )}
 
       {/* 文章列表 */}
-      {articles.map((article) => (
-        <Card key={article.id} className="relative">
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3 flex-1">
-                {/* 选择复选框 */}
-                <div className="pt-1">
+      {articles.map((article) => {
+        const md = illustratedMdByMaterial[article.material_id]
+        return (
+          <Card key={article.id} className="relative">
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3 flex-1">
+                  {/* 选择复选框 */}
+                  <div className="pt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleArticleSelection(article.id)}
+                      className="p-1 h-auto"
+                    >
+                      {selectedArticles.has(article.id) ? (
+                        <CheckSquare className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <Square className="w-4 h-4 text-gray-400" />
+                      )}
+                    </Button>
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CardTitle className="text-lg truncate">
+                        {extractTitle(article.rewritten_content || '')}
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs">
+                        {getRewriteStyleLabel(article.rewrite_style)}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>ID: {article.id}</span>
+                      <span>素材ID: {article.material_id}</span>
+                      <span>{formatTime(article.created_at)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 操作按钮 */}
+                <div className="flex items-center gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => toggleArticleSelection(article.id)}
-                    className="p-1 h-auto"
+                    onClick={() => toggleExpanded(article.id)}
                   >
-                    {selectedArticles.has(article.id) ? (
-                      <CheckSquare className="w-4 h-4 text-blue-600" />
-                    ) : (
-                      <Square className="w-4 h-4 text-gray-400" />
-                    )}
+                    {isExpanded(article.id) ? '收起' : '展开'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyToClipboard(extractTitle(article.rewritten_content || ''), '标题')}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteArticle(article.id)}
+                    disabled={isDeleting}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CardTitle className="text-lg truncate">
-                      {extractTitle(article.rewritten_content || '')}
-                    </CardTitle>
-                    <Badge variant="outline" className="text-xs">
-                      {getRewriteStyleLabel(article.rewrite_style)}
-                    </Badge>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>ID: {article.id}</span>
-                    <span>素材ID: {article.material_id}</span>
-                    <span>{formatTime(article.created_at)}</span>
-                  </div>
-                </div>
               </div>
-              
-              {/* 操作按钮 */}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleExpanded(article.id)}
-                >
-                  {isExpanded(article.id) ? '收起' : '展开'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => copyToClipboard(extractTitle(article.rewritten_content || ''), '标题')}
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteArticle(article.id)}
-                  disabled={isDeleting}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          
-          {isExpanded(article.id) && (
-            <CardContent className="pt-0">
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-medium mb-2 text-sm text-muted-foreground">改写后的内容</h4>
-                  <div className="bg-gray-50 p-3 rounded-md">
-                    <p className="whitespace-pre-wrap text-sm">
-                      {cleanContent(article.rewritten_content || '')}
-                    </p>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copyToClipboard(article.rewritten_content || '', '内容')}
-                    >
-                      <Copy className="w-3 h-3 mr-1" />
-                      复制内容
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copyToClipboard(
-                        article.rewritten_content || '',
-                        '完整内容'
+            </CardHeader>
+            
+            {isExpanded(article.id) && (
+              <CardContent className="pt-0">
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2 text-sm text-muted-foreground">改写后的内容</h4>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <p className="whitespace-pre-wrap text-sm">
+                        {cleanContent(article.rewritten_content || '')}
+                      </p>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(article.rewritten_content || '', '内容')}
+                      >
+                        <Copy className="w-3 h-3 mr-1" />
+                        复制内容
+                      </Button>
+                      {md && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyToClipboard(md, '配图Markdown')}
+                        >
+                          <Copy className="w-3 h-3 mr-1" />
+                          复制配图Markdown
+                        </Button>
                       )}
-                    >
-                      <Copy className="w-3 h-3 mr-1" />
-                      复制全部
-                    </Button>
+                    </div>
                   </div>
+                  {md && (
+                    <div className="border rounded-md">
+                      <div className="flex items-center justify-between p-2">
+                        <span className="text-sm text-muted-foreground">配图后的Markdown</span>
+                        <Button size="sm" variant="ghost" onClick={() => copyToClipboard(md, '配图Markdown')}>复制</Button>
+                      </div>
+                      <div className="p-3 bg-gray-50 rounded-b-md">
+                        <pre className="whitespace-pre-wrap text-sm">{md}</pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      ))}
+              </CardContent>
+            )}
+          </Card>
+        )
+      })}
       
       {/* 全选操作 */}
       {articles.length > 0 && (

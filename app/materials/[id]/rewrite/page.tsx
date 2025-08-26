@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Material, RewriteStyle, AIRewriteStatus } from '@/lib/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
-import { ArrowLeft, RefreshCw, Copy, Check } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Copy, Check, Image as ImageIcon } from 'lucide-react'
 
 interface RewriteResult {
   id: number
@@ -53,6 +53,9 @@ export default function RewriteResultPage() {
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState<string | null>(null)
   const { push: pushToast } = useToast()
+  const [isIllustrating, setIsIllustrating] = useState(false)
+  const [illustratedContent, setIllustratedContent] = useState<string | null>(null)
+  const [coverImage, setCoverImage] = useState<string | null>(null)
 
   // 加载素材信息
   const loadMaterial = useCallback(async () => {
@@ -394,6 +397,40 @@ export default function RewriteResultPage() {
                   重新改写
                 </Button>
               )}
+              {rewriteResult?.rewrittenContent && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isIllustrating}
+                  onClick={async () => {
+                    try {
+                      setIsIllustrating(true)
+                      setIllustratedContent(null)
+                      const res = await fetch('/api/ai/illustrate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ materialId }),
+                      })
+                      const json = await res.json()
+                      if (json?.success) {
+                        setIllustratedContent(json.data.contentWithImages)
+                        setCoverImage(json.data.cover || null)
+                        pushToast({ type: 'success', title: 'AI配图完成', description: '已生成插图并插入到正文预览' })
+                      } else {
+                        throw new Error(json?.error || 'AI配图失败')
+                      }
+                    } catch (e) {
+                      pushToast({ type: 'error', title: 'AI配图失败', description: e instanceof Error ? e.message : '未知错误' })
+                    } finally {
+                      setIsIllustrating(false)
+                    }
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  {isIllustrating ? '配图中...' : 'AI配图'}
+                </Button>
+              )}
             </div>
           </CardTitle>
         </CardHeader>
@@ -584,20 +621,36 @@ export default function RewriteResultPage() {
                       </div>
                       <div>
                         <h4 className="font-medium mb-3 flex items-center justify-between">
-                          改写后内容
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => copyToClipboard(rewriteResult.rewrittenContent || '', '改写后内容')}
-                            className="flex items-center gap-2"
-                          >
-                            {copied === '改写后内容' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                            复制
-                          </Button>
+                          改写后内容{illustratedContent ? '（含配图的Markdown预览）' : ''}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => copyToClipboard(rewriteResult.rewrittenContent || '', '改写后内容')}
+                              className="flex items-center gap-2"
+                            >
+                              {copied === '改写后内容' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                              复制
+                            </Button>
+                           {illustratedContent && (
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               onClick={() => copyToClipboard(illustratedContent, '配图Markdown')}
+                               className="flex items-center gap-2"
+                             >
+                               {copied === '配图Markdown' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                               复制配图Markdown
+                             </Button>
+                           )}
+                          </div>
                         </h4>
                         <div className="p-4 bg-green-50 border border-green-200 rounded-md min-h-[200px] max-h-[400px] overflow-y-auto">
-                          <pre className="whitespace-pre-wrap text-sm">{rewriteResult.rewrittenContent || '暂无改写结果'}</pre>
+                          <pre className="whitespace-pre-wrap text-sm">{illustratedContent || rewriteResult.rewrittenContent || '暂无改写结果'}</pre>
                         </div>
+                       {coverImage && (
+                         <div className="mt-3 text-xs text-muted-foreground">封面：{coverImage}</div>
+                       )}
                       </div>
                     </div>
                   </TabsContent>
