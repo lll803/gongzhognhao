@@ -117,6 +117,75 @@ export interface HotItem {
   createdAt: Date
 }
 
+// 素材库类型
+export interface Material {
+  id: number
+  title: string
+  description?: string
+  sourceUrl: string
+  sourcePlatform: string
+  sourceHashid?: string
+  sourceRank?: number
+  sourceHotValue?: number
+  thumbnail?: string
+  extraData?: Record<string, any>
+  status: MaterialStatus
+  tags?: string[]
+  category?: string
+  userId?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+// 素材状态枚举
+export enum MaterialStatus {
+  ACTIVE = 'active',
+  ARCHIVED = 'archived',
+  DELETED = 'deleted'
+}
+
+// AI改写任务类型
+export interface AIRewriteTask {
+  id: number
+  materialId: number
+  status: AIRewriteStatus
+  originalContent: string
+  rewrittenContent?: string
+  rewriteStyle: RewriteStyle
+  rewritePrompt?: string
+  errorMessage?: string
+  processingStartedAt?: Date
+  completedAt?: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
+// AI改写状态枚举
+export enum AIRewriteStatus {
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  FAILED = 'failed'
+}
+
+// 改写结果类型
+export interface RewriteResult {
+  id: number
+  taskId: number
+  materialId: number
+  originalTitle: string
+  rewrittenTitle?: string
+  originalDescription?: string
+  rewrittenDescription?: string
+  originalContent: string
+  rewrittenContent?: string
+  rewriteStyle: RewriteStyle
+  qualityScore?: number
+  wordCount?: number
+  processingTimeMs?: number
+  createdAt: Date
+}
+
 // 用户类型
 export interface User {
   id: string

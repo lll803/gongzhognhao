@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatRelativeTime } from '@/lib/utils'
+import { useToast } from '@/components/ui/toast'
 
 interface UiHotItem {
   id: number
@@ -44,6 +45,8 @@ export function HotItems() {
     TARGET_BOARDS.map(board => ({ ...board, status: 'idle' }))
   )
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const [addingToMaterials, setAddingToMaterials] = useState<Set<number>>(new Set())
+  const { push: pushToast } = useToast()
 
   function loadItems() {
     startTransition(async () => {
@@ -107,6 +110,102 @@ export function HotItems() {
       setLastRefreshTime(new Date())
     } finally {
       setIsRefreshing(false)
+    }
+  }
+
+  // 添加到素材库
+  async function addToMaterials(item: UiHotItem) {
+    if (addingToMaterials.has(item.id)) return
+
+    setAddingToMaterials(prev => new Set(prev).add(item.id))
+
+    try {
+      const boardInfo = TARGET_BOARDS.find(b => b.hashid === item.hashid)
+      
+      const response = await fetch('/api/materials', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: item.title,
+          description: item.description,
+          sourceUrl: item.url,
+          sourcePlatform: 'wechat',
+          sourceHashid: item.hashid,
+          sourceRank: item.rank,
+          sourceHotValue: item.hot_value,
+          thumbnail: item.thumbnail,
+          extraData: {
+            boardLabel: boardInfo?.label,
+            collectedAt: item.collected_at,
+          },
+          category: 'hot-trending',
+          tags: ['热榜', '微信', boardInfo?.label].filter(Boolean),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        pushToast({
+          type: 'success',
+          title: '添加成功',
+          description: '素材已添加到素材库，正在启动AI改写...',
+        })
+
+        // 自动触发AI改写
+        await triggerAIRewrite(result.data.id)
+      } else {
+        pushToast({
+          type: 'error',
+          title: '添加失败',
+          description: result.error || '未知错误',
+        })
+      }
+    } catch (error) {
+      console.error('添加到素材库失败:', error)
+      pushToast({
+        type: 'error',
+        title: '添加失败',
+        description: '网络错误，请重试',
+      })
+    } finally {
+      setAddingToMaterials(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(item.id)
+        return newSet
+      })
+    }
+  }
+
+  // 触发AI改写
+  async function triggerAIRewrite(materialId: number) {
+    try {
+      const response = await fetch('/api/ai/rewrite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          materialId,
+          rewriteStyle: 'professional',
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        pushToast({
+          type: 'success',
+          title: 'AI改写已启动',
+          description: '正在处理中，请稍后在素材库查看结果',
+        })
+      } else {
+        console.error('AI改写启动失败:', result.error)
+      }
+    } catch (error) {
+      console.error('AI改写启动失败:', error)
     }
   }
 
@@ -177,12 +276,9 @@ export function HotItems() {
             ) : (
               <div className="space-y-3">
                 {items.map((item) => (
-                  <a 
+                  <div 
                     key={`${item.hashid}-${item.rank}-${item.url}`} 
-                    href={item.url} 
-                    target="_blank" 
-                    rel="noreferrer" 
-                    className="block p-4 rounded-xl border hover:bg-accent/5 transition-colors min-w-0 break-words"
+                    className="p-4 rounded-xl border hover:bg-accent/5 transition-colors min-w-0 break-words"
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 mt-0.5">
@@ -214,8 +310,27 @@ export function HotItems() {
                           </div>
                         </div>
                       </div>
+                      <div className="flex-shrink-0 flex flex-col gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addToMaterials(item)}
+                          disabled={addingToMaterials.has(item.id)}
+                          className="text-xs px-3 py-1 h-auto"
+                        >
+                          {addingToMaterials.has(item.id) ? '添加中...' : '添加到素材库'}
+                        </Button>
+                        <a 
+                          href={item.url} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 underline"
+                        >
+                          查看原文
+                        </a>
+                      </div>
                     </div>
-                  </a>
+                  </div>
                 ))}
               </div>
             )}

@@ -18,6 +18,7 @@ import { useState } from 'react'
 const navigation = [
   { name: '概览', href: '/', icon: BarChart3 },
   { name: '内容采集', href: '/scraping', icon: Zap },
+  { name: '素材库', href: '/materials', icon: FileText },
   { name: 'AI改写', href: '/ai-rewrite', icon: FileText },
   { name: '内容管理', href: '/articles', icon: FileText },
   { name: '发布管理', href: '/publish', icon: FileText },
