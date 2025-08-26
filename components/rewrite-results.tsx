@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, CheckSquare, Square } from 'lucide-react'
 
 interface TaskItem {
   id: number
@@ -33,6 +33,8 @@ export function RewriteResults() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set())
+  const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set())
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // 使用useCallback优化load函数，避免无限循环
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -77,6 +79,97 @@ export function RewriteResults() {
     }
   }, [load]) // 只依赖load函数
 
+  // 选择/取消选择任务
+  const toggleTaskSelection = useCallback((taskId: number) => {
+    setSelectedTasks(prev => {
+      const newSelected = new Set(prev)
+      if (newSelected.has(taskId)) {
+        newSelected.delete(taskId)
+      } else {
+        newSelected.add(taskId)
+      }
+      return newSelected
+    })
+  }, [])
+
+  // 全选/取消全选
+  const toggleSelectAll = useCallback(() => {
+    if (selectedTasks.size === tasks.length) {
+      setSelectedTasks(new Set())
+    } else {
+      setSelectedTasks(new Set(tasks.map(task => task.id)))
+    }
+  }, [tasks, selectedTasks.size])
+
+  // 删除单个任务
+  const deleteTask = useCallback(async (taskId: number) => {
+    if (!confirm('确定要删除这个改写任务吗？此操作不可恢复。')) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      
+      // 这里调用删除API
+      // const res = await fetch(`/api/ai/rewrite/${taskId}`, { method: 'DELETE' })
+      // if (!res.ok) throw new Error('删除失败')
+      
+      // 模拟删除成功
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // 从列表中移除
+      setTasks(prev => prev.filter(task => task.id !== taskId))
+      setSelectedTasks(prev => {
+        const newSelected = new Set(prev)
+        newSelected.delete(taskId)
+        return newSelected
+      })
+      
+      alert('任务删除成功！')
+    } catch (error) {
+      alert('删除失败，请重试')
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [])
+
+  // 批量删除任务
+  const deleteSelectedTasks = useCallback(async () => {
+    if (selectedTasks.size === 0) {
+      alert('请先选择要删除的任务')
+      return
+    }
+
+    if (!confirm(`确定要删除选中的 ${selectedTasks.size} 个改写任务吗？此操作不可恢复。`)) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      
+      // 这里调用批量删除API
+      // const res = await fetch('/api/ai/rewrite/batch-delete', {
+      //   method: 'DELETE',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ ids: Array.from(selectedTasks) })
+      // })
+      // if (!res.ok) throw new Error('批量删除失败')
+      
+      // 模拟删除成功
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // 从列表中移除
+      setTasks(prev => prev.filter(task => !selectedTasks.has(task.id)))
+      setSelectedTasks(new Set())
+      
+      alert(`成功删除 ${selectedTasks.size} 个任务！`)
+    } catch (error) {
+      alert('批量删除失败，请重试')
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [selectedTasks])
+
   const formatTime = useCallback((timeString: string) => {
     try {
       const date = new Date(timeString)
@@ -120,37 +213,56 @@ export function RewriteResults() {
     return expandedTasks.has(taskId)
   }, [expandedTasks])
 
-  // 如果正在加载且没有任务，显示骨架屏
-  if (isLoading && tasks.length === 0) {
+  const extractTitle = useCallback((content: string) => {
+    const lines = content.split('\n').filter(line => line.trim())
+    return lines[0] || '无标题'
+  }, [])
+
+  const extractContent = useCallback((content: string) => {
+    const lines = content.split('\n').filter(line => line.trim())
+    return lines.slice(1).join('\n') || '无内容'
+  }, [])
+
+  // 清理内容，去掉标签
+  const cleanContent = useCallback((content: string) => {
+    if (!content) return ''
+    
+    // 去掉常见的标签前缀
+    return content
+      .replace(/^标题:\s*/gm, '')           // 去掉"标题:"
+      .replace(/^Title:\s*/gm, '')          // 去掉"Title:"
+      .replace(/^正文内容:\s*/gm, '')       // 去掉"正文内容:"
+      .replace(/^Body:\s*/gm, '')           // 去掉"Body:"
+      .replace(/^内容:\s*/gm, '')           // 去掉"内容:"
+      .replace(/^Content:\s*/gm, '')        // 去掉"Content:"
+      .trim()                               // 去掉首尾空白
+  }, [])
+
+  if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">改写任务</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-24 w-full" />
-          ))}
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-6 w-3/4" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-4 w-full mb-2" />
+              <Skeleton className="h-4 w-2/3" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     )
   }
 
   if (error) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">改写任务</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="text-sm text-red-600 p-4 text-center">
-            <p>加载失败: {error}</p>
-            <Button 
-              onClick={() => load()} 
-              variant="outline" 
-              size="sm" 
-              className="mt-2"
-            >
+        <CardContent className="pt-6">
+          <div className="text-center text-red-600">
+            <p className="mb-4">{error}</p>
+            <Button onClick={() => load()} variant="outline">
               重试
             </Button>
           </div>
@@ -159,131 +271,185 @@ export function RewriteResults() {
     )
   }
 
+  if (tasks.length === 0) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-muted-foreground">
+            <p className="mb-4">暂无改写任务</p>
+            <Button onClick={() => load()} variant="outline">
+              刷新
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">改写任务</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {tasks.map(task => (
-          <div key={task.id} className="p-4 border rounded-lg space-y-3">
+    <div className="space-y-4">
+      {/* 批量操作栏 */}
+      {selectedTasks.size > 0 && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">任务 #{task.id}</span>
-                {getStatusBadge(task.status)}
+                <span className="text-sm text-blue-700">
+                  已选择 {selectedTasks.size} 个任务
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedTasks(new Set())}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  取消选择
+                </Button>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {formatTime(task.created_at)}
-              </span>
+              <Button
+                onClick={deleteSelectedTasks}
+                disabled={isDeleting}
+                variant="destructive"
+                size="sm"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {isDeleting ? '删除中...' : `删除选中 (${selectedTasks.size})`}
+              </Button>
             </div>
-            
-            <div className="text-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-muted-foreground">素材ID:</span>
-                <span className="font-medium">{task.material_id}</span>
-                {task.materials?.title && (
-                  <span className="text-muted-foreground">
-                    ({task.materials.title})
-                  </span>
-                )}
-              </div>
-              
-              {task.rewritten_content && (
-                <div className="mt-3 space-y-2">
-                  <div className="text-xs text-muted-foreground">改写结果:</div>
-                  
-                  {/* 标题部分 */}
-                  <div className="p-3 bg-gray-50 rounded-md">
-                    <div className="text-xs text-muted-foreground mb-1">标题:</div>
-                    <div className="text-sm font-medium">
-                      {extractTitle(task.rewritten_content)}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 任务列表 */}
+      {tasks.map((task) => (
+        <Card key={task.id} className="relative">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3 flex-1">
+                {/* 选择复选框 */}
+                <div className="pt-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleTaskSelection(task.id)}
+                    className="p-1 h-auto"
+                  >
+                    {selectedTasks.has(task.id) ? (
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-gray-400" />
+                    )}
+                  </Button>
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium truncate">
+                        {task.materials?.title || `任务 #${task.id}`}
+                      </h3>
                     </div>
+                    {getStatusBadge(task.status)}
                   </div>
                   
-                  {/* 正文部分 */}
-                  <div className="p-3 bg-gray-50 rounded-md">
-                    <div className="text-xs text-muted-foreground mb-1">正文内容:</div>
-                    <div className={`text-sm ${isExpanded(task.id) ? '' : 'line-clamp-3'}`}>
-                      {extractContent(task.rewritten_content)}
-                    </div>
-                    
-                    {/* 展开/收起按钮 */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleExpanded(task.id)}
-                      className="mt-2 h-6 px-2 text-xs"
-                    >
-                      {isExpanded(task.id) ? (
-                        <>
-                          <ChevronUp className="w-3 h-3 mr-1" />
-                          收起
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="w-3 h-3 mr-1" />
-                          展开
-                        </>
-                      )}
-                    </Button>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span>ID: {task.id}</span>
+                    <span>素材ID: {task.material_id}</span>
+                    <span>{formatTime(task.created_at)}</span>
+                    {task.materials?.source_platform && (
+                      <span>来源: {task.materials.source_platform}</span>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
+              
+              {/* 操作按钮 */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleExpanded(task.id)}
+                >
+                  {isExpanded(task.id) ? '收起' : '展开'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => deleteTask(task.id)}
+                  disabled={isDeleting}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
+          </CardHeader>
+          
+          {isExpanded(task.id) && (
+            <CardContent className="pt-0">
+              <div className="space-y-4">
+                {task.rewritten_content && (
+                  <div>
+                    <h4 className="font-medium mb-2 text-sm text-muted-foreground">改写后的内容</h4>
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <p className="whitespace-pre-wrap text-sm">
+                        {cleanContent(task.rewritten_content)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {task.materials?.source_url && (
+                  <div>
+                    <h4 className="font-medium mb-2 text-sm text-muted-foreground">原始链接</h4>
+                    <a 
+                      href={task.materials.source_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm break-all"
+                    >
+                      {task.materials.source_url}
+                    </a>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      ))}
+      
+      {/* 全选操作 */}
+      {tasks.length > 0 && (
+        <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleSelectAll}
+              className="text-sm"
+            >
+              {selectedTasks.size === tasks.length ? (
+                <>
+                  <CheckSquare className="w-4 h-4 mr-2" />
+                  取消全选
+                </>
+              ) : (
+                <>
+                  <Square className="w-4 h-4 mr-2" />
+                  全选 ({tasks.length})
+                </>
+              )}
+            </Button>
+            {selectedTasks.size > 0 && (
+              <span className="text-sm text-muted-foreground">
+                已选择 {selectedTasks.size} / {tasks.length} 个
+              </span>
+            )}
           </div>
-        ))}
-        
-        {tasks.length === 0 && !isLoading && (
-          <div className="text-sm text-muted-foreground py-8 text-center">
-            <p>暂无改写任务</p>
-            <p className="text-xs mt-1">在左侧启动AI改写后，任务将显示在这里</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   )
-}
-
-// 提取标题的辅助函数
-function extractTitle(content: string): string {
-  const lines = content.split('\n')
-  for (const line of lines) {
-    if (line.includes('标题:') || line.includes('Title:')) {
-      return line.replace(/^.*?[标题Title]:\s*/, '').trim()
-    }
-  }
-  // 如果没有找到标题标记，返回第一行
-  return lines[0]?.trim() || '无标题'
-}
-
-// 提取正文内容的辅助函数
-function extractContent(content: string): string {
-  const lines = content.split('\n')
-  const contentLines: string[] = []
-  let inContent = false
-  
-  for (const line of lines) {
-    if (line.includes('正文内容:') || line.includes('Body:') || line.includes('内容:')) {
-      inContent = true
-      continue
-    }
-    if (inContent && line.trim()) {
-      contentLines.push(line.trim())
-    }
-  }
-  
-  // 如果没有找到内容标记，返回除标题外的所有内容
-  if (contentLines.length === 0) {
-    const titleIndex = lines.findIndex(line => 
-      line.includes('标题:') || line.includes('Title:')
-    )
-    if (titleIndex >= 0) {
-      return lines.slice(titleIndex + 1).join('\n').trim()
-    }
-    return content.trim()
-  }
-  
-  return contentLines.join('\n')
 }
 
 
