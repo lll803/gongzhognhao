@@ -12,19 +12,25 @@ export interface IllustrationPlan {
 }
 
 export async function buildIllustrationPlan(title: string | undefined, content: string): Promise<IllustrationPlan> {
-  const userPrompt = `你是资深新媒体编辑，请完成两件事：
-1) 依据标题与正文给出一个中文的“封面图提示词”，不超过40字，强调主体元素与氛围，避免修辞；用于微信公众号封面（横版，宽高比约 900x383，主体置中，四周留出安全边距，不要文字水印）。
-2) 将正文合理分段（不超过6段），对每一段给出一个中文的“插图提示词”（每条不超过30字），提示词侧重画面元素与场景，不要主语“插图：”。
-只输出严格的 JSON，字段为 { coverPrompt: string, items: Array<{ index: number, text: string, prompt: string }> }。\n\n标题：${title || ''}\n\n正文：\n${content}`
+  const userPrompt = `You are a senior editorial art director for a Chinese article. Produce concise, concrete ENGLISH prompts for image generation.
+
+Tasks:
+1) Based on the title and body, output one English "cover image prompt" (<= 35 words). It must describe a clear main subject, scene, composition and mood for a WeChat cover (horizontal 900x383, centered subject, safe margins). Avoid abstract wording. Append: "without text, watermark, logo, caption".
+2) Split the body into up to 6 logical paragraphs. For each paragraph, output an English "illustration prompt" (<= 30 words) that matches that paragraph’s meaning. Each prompt should specify: main subject, setting, time/lighting, style/medium (e.g. documentary photo, flat illustration, watercolor), composition cues, mood. Avoid proper names/brands. Append: "without text, watermark, logo, caption".
+
+Return STRICT JSON only with fields { coverPrompt: string, items: Array<{ index: number, text: string, prompt: string }> } where text is a short Chinese summary (<= 40 汉字) of that paragraph.
+
+Title (Chinese): ${title || ''}
+Body (Chinese):\n${content}`
 
   const completion = await openai.chat.completions.create({
     model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
     messages: [
-      { role: 'system', content: '你是严谨的JSON生成器，确保输出合法JSON。' },
+      { role: 'system', content: 'You output ONLY valid minified JSON using standard ASCII quotes, no trailing commas. All image prompts MUST be English and concrete.' },
       { role: 'user', content: userPrompt },
     ],
-    temperature: 0.4,
-    max_tokens: 1500,
+    temperature: 0.2,
+    max_tokens: 1400,
   })
 
   const text = completion.choices[0]?.message?.content || '{}'
