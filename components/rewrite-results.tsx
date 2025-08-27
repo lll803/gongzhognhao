@@ -50,10 +50,78 @@ export function RewriteResults() {
     return `<div>${html}</div>`
   }
 
+  // 重新托管图片到本地服务器，确保链接稳定
+  async function rehostImages(markdownContent: string): Promise<string> {
+    if (!markdownContent) return markdownContent
+    
+    // 提取所有图片链接
+    const imgRe = /!\[[^\]]*\]\(([^\)\s]+)(?:\s+\"[^\"]*\")?\)/g
+    const imageUrls: string[] = []
+    let match
+    while ((match = imgRe.exec(markdownContent)) !== null) {
+      imageUrls.push(match[1])
+    }
+    
+    if (imageUrls.length === 0) return markdownContent
+    
+    try {
+      console.log(`开始重新托管 ${imageUrls.length} 张图片...`)
+      
+      // 调用重新托管API
+      const res = await fetch('/api/images/rehost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: imageUrls })
+      })
+      
+      if (!res.ok) {
+        console.warn('图片重新托管失败，使用原始链接')
+        return markdownContent
+      }
+      
+      const json = await res.json()
+      if (!json?.success || !json?.data?.map) {
+        console.warn('图片重新托管响应异常，使用原始链接')
+        return markdownContent
+      }
+      
+      const { map, failed, total, success } = json.data
+      
+      // 显示重新托管结果
+      if (failed && failed.length > 0) {
+        console.warn(`${total} 张图片中，${success} 张成功，${failed.length} 张失败`)
+        if (failed.length > 0) {
+          console.warn('失败的图片URL:', failed)
+        }
+      } else {
+        console.log(`所有 ${total} 张图片重新托管成功！`)
+      }
+      
+      // 替换图片链接
+      let updatedContent = markdownContent
+      for (const [originalUrl, newUrl] of Object.entries(map)) {
+        updatedContent = updatedContent.replace(new RegExp(originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), newUrl as string)
+      }
+      
+      return updatedContent
+    } catch (error) {
+      console.error('图片重新托管出错:', error)
+      return markdownContent
+    }
+  }
+
   async function copyWeChatHtml(md?: string) {
     if (!md) return
-    const html = mdToWeChatHtml(md)
+    
     try {
+      // 显示正在处理的提示
+      const processingMsg = '正在重新托管图片，确保链接稳定...'
+      console.log(processingMsg)
+      
+      // 先重新托管图片，确保链接稳定
+      const stableMd = await rehostImages(md)
+      const html = mdToWeChatHtml(stableMd)
+      
       if ((window as any).ClipboardItem) {
         const item = new (window as any).ClipboardItem({
           'text/html': new Blob([html], { type: 'text/html' }),
@@ -63,10 +131,10 @@ export function RewriteResults() {
       } else {
         await navigator.clipboard.writeText(html)
       }
-      alert('已复制公众号HTML')
-    } catch {
-      await navigator.clipboard.writeText(html)
-      alert('已复制为纯文本HTML')
+      alert('已复制公众号HTML（图片已重新托管，链接稳定）')
+    } catch (error) {
+      console.error('复制公众号HTML失败:', error)
+      alert('复制失败，请重试')
     }
   }
 
@@ -304,13 +372,13 @@ export function RewriteResults() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 w-full">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader>
+          <Card key={i} className="w-full">
+            <CardHeader className="w-full">
               <Skeleton className="h-6 w-3/4" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="w-full">
               <Skeleton className="h-4 w-full mb-2" />
               <Skeleton className="h-4 w-2/3" />
             </CardContent>
@@ -322,11 +390,11 @@ export function RewriteResults() {
 
   if (error) {
     return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-center text-red-600">
-            <p className="mb-4">{error}</p>
-            <Button onClick={() => load()} variant="outline">
+      <Card className="w-full">
+        <CardContent className="pt-6 w-full">
+          <div className="text-center text-red-600 w-full">
+            <p className="mb-4 break-words">{error}</p>
+            <Button onClick={() => load()} variant="outline" className="flex-shrink-0">
               重试
             </Button>
           </div>
@@ -337,11 +405,11 @@ export function RewriteResults() {
 
   if (tasks.length === 0) {
     return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-center text-muted-foreground">
+      <Card className="w-full">
+        <CardContent className="pt-6 w-full">
+          <div className="text-center text-muted-foreground w-full">
             <p className="mb-4">暂无改写任务</p>
-            <Button onClick={() => load()} variant="outline">
+            <Button onClick={() => load()} variant="outline" className="flex-shrink-0">
               刷新
             </Button>
           </div>
@@ -351,21 +419,21 @@ export function RewriteResults() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full max-w-full">
       {/* 批量操作栏 */}
       {selectedTasks.size > 0 && (
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-blue-700">
+        <Card className="bg-blue-50 border-blue-200 w-full">
+          <CardContent className="pt-4 w-full">
+            <div className="button-group w-full justify-between">
+              <div className="button-group">
+                <span className="text-sm text-blue-700 whitespace-nowrap">
                   已选择 {selectedTasks.size} 个任务
                 </span>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setSelectedTasks(new Set())}
-                  className="text-blue-600 hover:text-blue-800"
+                  className="text-blue-600 hover:text-blue-800 flex-shrink-0"
                 >
                   取消选择
                 </Button>
@@ -375,6 +443,7 @@ export function RewriteResults() {
                 disabled={isDeleting}
                 variant="destructive"
                 size="sm"
+                className="flex-shrink-0"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 {isDeleting ? '删除中...' : `删除选中 (${selectedTasks.size})`}
@@ -386,12 +455,12 @@ export function RewriteResults() {
 
       {/* 任务列表 */}
       {tasks.map((task) => (
-        <Card key={task.id} className="relative">
+        <Card key={task.id} className="relative w-full task-card">
           <CardHeader className="pb-3">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3 flex-1">
+            <div className="flex items-start justify-between gap-3 w-full">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
                 {/* 选择复选框 */}
-                <div className="pt-1">
+                <div className="pt-1 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -407,32 +476,35 @@ export function RewriteResults() {
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium truncate">
+                      <h3 className="font-medium break-words">
                         {task.materials?.title || `任务 #${task.id}`}
                       </h3>
                     </div>
-                    {getStatusBadge(task.status)}
+                    <div className="status-badge">
+                      {getStatusBadge(task.status)}
+                    </div>
                   </div>
                   
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>ID: {task.id}</span>
-                    <span>素材ID: {task.material_id}</span>
-                    <span>{formatTime(task.created_at)}</span>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                    <span className="whitespace-nowrap">ID: {task.id}</span>
+                    <span className="whitespace-nowrap">素材ID: {task.material_id}</span>
+                    <span className="whitespace-nowrap">{formatTime(task.created_at)}</span>
                     {task.materials?.source_platform && (
-                      <span>来源: {task.materials.source_platform}</span>
+                      <span className="whitespace-nowrap">来源: {task.materials.source_platform}</span>
                     )}
                   </div>
                 </div>
               </div>
               
               {/* 操作按钮 */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => toggleExpanded(task.id)}
+                  className="whitespace-nowrap"
                 >
                   {isExpanded(task.id) ? '收起' : '展开'}
                 </Button>
@@ -441,7 +513,7 @@ export function RewriteResults() {
                   size="sm"
                   onClick={() => deleteTask(task.id)}
                   disabled={isDeleting}
-                  className="text-red-600 hover:text-red-800"
+                  className="text-red-600 hover:text-red-800 flex-shrink-0"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -450,17 +522,17 @@ export function RewriteResults() {
           </CardHeader>
           
           {isExpanded(task.id) && (
-            <CardContent className="pt-0">
-              <div className="space-y-4">
+            <CardContent className="pt-0 w-full">
+              <div className="space-y-4 w-full ai-rewrite-content">
                 {task.rewritten_content && (
-                  <div>
+                  <div className="w-full">
                     <h4 className="font-medium mb-2 text-sm text-muted-foreground">改写后的内容</h4>
-                    <div className="bg-gray-50 p-3 rounded-md">
-                      <p className="whitespace-pre-wrap text-sm">
+                    <div className="bg-gray-50 p-3 rounded-md w-full overflow-hidden">
+                      <div className="rewritten-content text-sm">
                         {cleanContent(task.rewritten_content)}
-                      </p>
+                      </div>
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 button-group">
                       <Button
                         variant="outline"
                         size="sm"
@@ -468,6 +540,8 @@ export function RewriteResults() {
                         onClick={async () => {
                           try {
                             setIllustratingTaskId(task.id)
+                            console.log('开始AI配图...')
+                            
                             const res = await fetch('/api/ai/illustrate', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -475,16 +549,23 @@ export function RewriteResults() {
                             })
                             const json = await res.json()
                             if (json?.success) {
-                              setIllustratedMarkdownByTask(prev => ({ ...prev, [task.id]: json.data.contentWithImages }))
+                              console.log('AI配图完成，开始重新托管图片...')
+                              
+                              // 生成配图后立即重新托管图片，确保链接稳定
+                              const stableMd = await rehostImages(json.data.contentWithImages)
+                              setIllustratedMarkdownByTask(prev => ({ ...prev, [task.id]: stableMd }))
+                              alert('AI配图完成！图片已重新托管，链接稳定')
                             } else {
                               alert(json?.error || 'AI配图失败')
                             }
                           } catch (e) {
+                            console.error('AI配图失败:', e)
                             alert('AI配图失败')
                           } finally {
                             setIllustratingTaskId(null)
                           }
                         }}
+                        className="flex-shrink-0"
                       >
                         <ImageIcon className="w-4 h-4 mr-1" />
                         {illustratingTaskId === task.id ? '配图中...' : 'AI配图'}
@@ -494,9 +575,20 @@ export function RewriteResults() {
                           variant="outline"
                           size="sm"
                           onClick={async () => {
-                            await navigator.clipboard.writeText(illustratedMarkdownByTask[task.id])
-                            alert('已复制带图Markdown')
+                            try {
+                              // 显示正在处理的提示
+                              console.log('正在重新托管图片，确保链接稳定...')
+                              
+                              // 先重新托管图片，确保链接稳定
+                              const stableMd = await rehostImages(illustratedMarkdownByTask[task.id])
+                              await navigator.clipboard.writeText(stableMd)
+                              alert('已复制带图Markdown（图片已重新托管，链接稳定）')
+                            } catch (error) {
+                              console.error('复制配图Markdown失败:', error)
+                              alert('复制失败，请重试')
+                            }
                           }}
+                          className="flex-shrink-0"
                         >
                           <Copy className="w-4 h-4 mr-1" />复制配图Markdown
                         </Button>
@@ -506,6 +598,7 @@ export function RewriteResults() {
                           variant="outline"
                           size="sm"
                           onClick={() => copyWeChatHtml(illustratedMarkdownByTask[task.id])}
+                          className="flex-shrink-0"
                         >
                           <Copy className="w-4 h-4 mr-1" />复制公众号HTML
                         </Button>
@@ -515,13 +608,13 @@ export function RewriteResults() {
                 )}
                 
                 {task.materials?.source_url && (
-                  <div>
+                  <div className="w-full">
                     <h4 className="font-medium mb-2 text-sm text-muted-foreground">原始链接</h4>
                     <a 
                       href={task.materials.source_url} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 text-sm break-all"
+                      className="text-blue-600 hover:text-blue-800 text-sm break-all block w-full"
                     >
                       {task.materials.source_url}
                     </a>
@@ -535,13 +628,13 @@ export function RewriteResults() {
       
       {/* 全选操作 */}
       {tasks.length > 0 && (
-        <div className="flex items-center justify-between pt-4 border-t">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between pt-4 border-t w-full">
+          <div className="button-group">
             <Button
               variant="ghost"
               size="sm"
               onClick={toggleSelectAll}
-              className="text-sm"
+              className="text-sm flex-shrink-0"
             >
               {selectedTasks.size === tasks.length ? (
                 <>
@@ -556,7 +649,7 @@ export function RewriteResults() {
               )}
             </Button>
             {selectedTasks.size > 0 && (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
                 已选择 {selectedTasks.size} / {tasks.length} 个
               </span>
             )}
