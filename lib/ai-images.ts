@@ -97,14 +97,42 @@ export async function generateImage(prompt: string, opts?: { width?: number; hei
 }
 
 export function injectImagesIntoMarkdown(originalContent: string, images: GeneratedImage[], paragraphs: Array<{ index: number; text: string }>): string {
-  const parts = paragraphs.length > 0 ? paragraphs.map(p => p.text) : originalContent.split(/\n\n+/)
-  const lines: string[] = []
-  for (let i = 0; i < parts.length; i++) {
-    lines.push(parts[i])
-    const img = images.find(im => im.index === i)
-    if (img) {
-      lines.push(`\n![配图](${img.url})\n`)
+  // 如果段落信息完整，按段落插入图片
+  if (paragraphs.length > 0) {
+    const lines: string[] = []
+    for (let i = 0; i < paragraphs.length; i++) {
+      lines.push(paragraphs[i].text)
+      const img = images.find(im => im.index === i)
+      if (img) {
+        lines.push(`\n![配图](${img.url})\n`)
+      }
     }
+    return lines.join('\n\n')
   }
-  return lines.join('\n\n')
+  
+  // 如果没有段落信息，保持原始内容完整，在适当位置插入图片
+  const lines = originalContent.split('\n')
+  const result: string[] = []
+  let currentIndex = 0
+  
+  for (const line of lines) {
+    result.push(line)
+    
+    // 每3-4行插入一张图片（如果有的话）
+    if (currentIndex > 0 && currentIndex % 4 === 0) {
+      const img = images.find(im => im.index === Math.floor(currentIndex / 4) - 1)
+      if (img) {
+        result.push(`\n![配图](${img.url})\n`)
+      }
+    }
+    currentIndex++
+  }
+  
+  // 如果还有图片没插入，在末尾添加
+  const remainingImages = images.filter(img => img.index >= Math.floor(currentIndex / 4))
+  for (const img of remainingImages) {
+    result.push(`\n![配图](${img.url})\n`)
+  }
+  
+  return result.join('\n')
 }

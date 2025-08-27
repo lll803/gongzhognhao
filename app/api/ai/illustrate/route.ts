@@ -63,7 +63,9 @@ export async function POST(req: NextRequest) {
     }
 
     // 3) 将图片均匀插入到正文（markdown）
-    let md = injectImagesIntoMarkdown(content, imgs.map((it) => ({ index: it.index, url: it.url })), plan.paragraphPrompts.map(p => ({ index: p.index, text: p.text })))
+    // 使用原始内容按段落分割，而不是AI生成的摘要
+    const originalParagraphs = content.split(/\n\n+/).map((text, index) => ({ index, text: text.trim() }))
+    let md = injectImagesIntoMarkdown(content, imgs.map((it) => ({ index: it.index, url: it.url })), originalParagraphs)
 
     // 3.1) 重传图片到自有存储，并替换为稳定外链
     try {
