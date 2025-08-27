@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { DashboardHeader } from '@/components/dashboard-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { HotItems } from '@/components/hot-items'
+import { UrlCollector } from '@/components/url-collector'
 
 export default function ScrapingPage() {
   return (
@@ -14,6 +15,10 @@ export default function ScrapingPage() {
           <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             从各大平台采集热门内容，支持微信、知乎、百度等平台
           </p>
+        </div>
+
+        <div className="w-full max-w-full mb-8">
+          <UrlCollector />
         </div>
 
         <div className="w-full max-w-full">
