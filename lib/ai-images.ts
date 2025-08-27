@@ -15,8 +15,8 @@ export async function buildIllustrationPlan(title: string | undefined, content: 
   const userPrompt = `You are a senior editorial art director for a Chinese article. Produce concise, concrete ENGLISH prompts for image generation.
 
 Tasks:
-1) Based on the title and body, output one English "cover image prompt" (<= 35 words). It must describe a clear main subject, scene, composition and mood for a WeChat cover (horizontal 900x383, centered subject, safe margins). Avoid abstract wording. Append: "without text, watermark, logo, caption".
-2) Split the body into up to 6 logical paragraphs. For each paragraph, output an English "illustration prompt" (<= 30 words) that matches that paragraph’s meaning. Each prompt should specify: main subject, setting, time/lighting, style/medium (e.g. documentary photo, flat illustration, watercolor), composition cues, mood. Avoid proper names/brands. Append: "without text, watermark, logo, caption".
+1) Based on the title and body, output one English "cover image prompt" (<= 35 words). It must describe a clear main subject, scene, composition and mood for a WeChat cover (horizontal 900x383, centered subject, safe margins). Style MUST be: documentary, realistic photography, real-world, natural light. Avoid abstract wording. Append: "photo-realistic, real people and places, NOT illustration, NOT cartoon, NOT painting, without text, watermark, logo, caption".
+2) Split the body into up to 6 logical paragraphs. For each paragraph, output an English "illustration prompt" (<= 30 words) that matches that paragraph’s meaning. Each prompt must be in realistic photography style (documentary, real-world). Specify: main subject, setting, time/lighting, lens/composition cues, mood. Avoid proper names/brands. Append: "photo-realistic, documentary, natural light, NOT illustration, NOT cartoon, NOT painting, without text, watermark, logo, caption".
 
 Return STRICT JSON only with fields { coverPrompt: string, items: Array<{ index: number, text: string, prompt: string }> } where text is a short Chinese summary (<= 40 汉字) of that paragraph.
 
@@ -45,6 +45,15 @@ export interface GeneratedImage {
   url: string
 }
 
+function normalizeToPhotoPrompt(input: string): string {
+  const base = `${input}`.trim()
+  const suffix = 'photo-realistic, documentary photography, natural light, high detail, sharp focus, real people, real locations, not illustration, not cartoon, not painting, without text, watermark, logo, caption'
+  // Avoid excessive duplication if already contains "photo" or "documentary"
+  const lower = base.toLowerCase()
+  if (lower.includes('photo-realistic') || lower.includes('documentary')) return base
+  return `${base}, ${suffix}`
+}
+
 export async function generateImageWithFal(prompt: string, opts?: { width?: number; height?: number; guidance_scale?: number; steps?: number }): Promise<string> {
   const apiKey = process.env.FAL_KEY
   const endpoint = process.env.FAL_MODEL_ENDPOINT || 'https://fal.run/fal-ai/flux/schnell'
@@ -62,7 +71,7 @@ export async function generateImageWithFal(prompt: string, opts?: { width?: numb
   const adjustedHeight = Math.floor(height / 8) * 8
 
   const requestBody = {
-    prompt,
+    prompt: normalizeToPhotoPrompt(prompt),
     guidance_scale: guidance,
     num_inference_steps: steps,
     width: adjustedWidth,
